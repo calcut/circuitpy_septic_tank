@@ -27,7 +27,6 @@ def main():
 
     }
 
-
     # instantiate the MCU helper class to set up the system
     mcu = Mcu(display=None)
     # Check what devices are present on the i2c bus
@@ -61,6 +60,7 @@ def main():
     if AIO:
 
         mcu.wifi_connect()
+        # mcu.aio_setup(log_feed='relay-logging')
         mcu.aio_setup()
         mcu.subscribe("target-temperature")
 
@@ -71,8 +71,6 @@ def main():
 
                 if feed_id == 'target-temperature':
                     mcu.temperature_target = float(payload)
-                    # Nothing is done with this currently
-
 
     def publish_feeds():
         # AIO limits to 30 data points per minute in the free version
@@ -88,6 +86,7 @@ def main():
 
     timer_100ms = 0
     timer_1s = 0
+    timer_30s = 0
 
     while True:
 
@@ -98,10 +97,10 @@ def main():
             mcu.aio_receive()
             parse_feeds()
 
-        if (time.monotonic() - timer_1s) >= 1:
+        if (time.monotonic() - timer_1s) >= 5:
             timer_1s = time.monotonic()
             print
-            if htu.temperature < mcu.temperature_target:
+            if htu.temperature < mcu.temperature_target: #Need to add hysteresis here!
                 print("temp too low, heating on")
                 relay_set_pin.value = True
                 relay_unset_pin.value = False
@@ -115,6 +114,13 @@ def main():
             print("Temperature: %0.1f C" % htu.temperature)
             print("Humidity: %0.1f %%" % htu.relative_humidity)
             print("")
+            
+            ts = mcu.get_timestamp()
+            mcu.logger.error(f"test {ts}")
+                
+
+        if (time.monotonic() - timer_30s) >= 30:
+            timer_30s = time.monotonic()            
             publish_feeds()
 
 
