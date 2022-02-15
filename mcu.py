@@ -4,10 +4,13 @@
 
 # System and timing
 import time
+import rtc
 from microcontroller import watchdog
 from watchdog import WatchDogMode, WatchDogTimeout
 import supervisor
 import usb_cdc
+import adafruit_logging as logging
+# from adafruit_logging import LoggingHandler
 
 # On-board hardware
 import board
@@ -36,9 +39,17 @@ __version__ = "0.0.0-auto.0"
 __repo__ = "https://github.com/calcut/circuitpy-heatpump"
 
 class Mcu():
-    def __init__(self, i2c_freq=50000, i2c_lookup=None, display="Sparkfun_LCD"):
+    def __init__(self, i2c_freq=50000, i2c_lookup=None, display="Sparkfun_LCD" ):
 
         self.enable_watchdog()
+
+        self.rtc = rtc.RTC()
+
+        self.logger = logging.getLogger('mcu')
+        self.logger.addHandler(FileHandler('log.txt'))
+        self.logger.level = logging.INFO
+        self.aio_log_feed = None
+        
 
         # Pull the I2C power pin low to enable I2C power
         print('Powering up I2C bus')
@@ -176,7 +187,10 @@ class Mcu():
                 if i >= len(secrets['networks']):
                     i=0
 
-    def aio_setup(self):
+    def aio_setup(self, log_feed=None):
+
+        self.aio_log_feed = log_feed
+
         # Create a socket pool
         pool = socketpool.SocketPool(wifi.radio)
 
@@ -188,6 +202,7 @@ class Mcu():
             socket_pool=pool,
             ssl_context=ssl.create_default_context(),
         )
+
         # self.mqtt_client.connect()
         # Initialize an Adafruit IO MQTT Client
         self.io = IO_MQTT(self.mqtt_client)
@@ -226,6 +241,10 @@ class Mcu():
         # calls against it easily.
         print("Connected to AIO")
         self.aio_connected = True
+        self.io.subscribe_to_time("seconds")
+        if self.aio_log_feed:
+            self.logger.addHandler(AIOHandler(self.aio_log_feed, self)) 
+           
 
     def aio_subscribe_callback(self, client, userdata, topic, granted_qos):
         # This method is called when the client subscribes to a new feed.
@@ -249,8 +268,12 @@ class Mcu():
         # The feed_id parameter identifies the feed, and the payload parameter has
         # the new value.
         # print("Feed {0} received new value: {1}".format(feed_id, payload))
-        print(f"{feed_id} = {payload}")
-        self.feeds[feed_id] = payload
+        if feed_id == 'seconds':
+            self.rtc.datetime = time.localtime(int(payload))
+            # print(f'RTC syncronised')
+        else:
+            print(f"{feed_id} = {payload}")
+            self.feeds[feed_id] = payload
 
     def aio_receive(self):
         if self.aio_connected:
@@ -283,6 +306,12 @@ class Mcu():
                     self.aio_publish_interval = 2 * len(feeds) +1
                 print(f"next publish in {self.aio_publish_interval}s")
 
+    def get_timestamp(self):
+        t = self.rtc.datetime
+        string = f'{t.tm_year}-{t.tm_mon:02}-{t.tm_mday:02} {t.tm_hour:02}:{t.tm_min:02}:{t.tm_sec:02}'
+        return string
+
+
     def read_serial(self, send_to=None):
         # This is likely broken, it was intended to be used with asyncio
         serial = usb_cdc.console
@@ -307,3 +336,56 @@ class Mcu():
                 send_to(input_line)
             else:
                 print(f'you typed: {input_line}')
+
+class AIOHandler(logging.LoggingHandler):
+
+    def __init__(self, feed_name, mcu_device):
+        self._log_feed_name = feed_name
+        self._device = mcu_device
+
+    def emit(self, level, msg):
+        """Generate the message and write it to the AIO Feed.
+
+        :param level: The level at which to log
+        :param msg: The core message
+
+        """
+        print(f'publishing {self._log_feed_name} = {self.format(level, msg)}')
+        self._device.io.publish(self._log_feed_name, self.format(level, msg))
+
+
+        
+class FileHandler(logging.LoggingHandler):
+
+    def __init__(self, filename):
+        """Create an instance.
+
+        :param filename: the name of the file to which to write messages
+
+        """
+        self._filename = filename
+
+    def format(self, level, msg):
+        """Generate a string to log.
+
+        :param level: The level at which to log
+        :param msg: The core message
+
+        """
+        return super().format(level, msg) + '\r\n'
+
+    def emit(self, level, msg):
+        """Generate the message and write it to the UART.
+
+        :param level: The level at which to log
+        :param msg: The core message
+
+        """
+        print(f'trying to write {self.format(level, msg)} to {self._filename}')
+        try:
+            with open(self._filename, 'a+') as f:
+                f.write(self.format(level, msg))
+        except OSError as e:
+            print(f'FS not writable {self.format(level, msg)}')
+            if e.args[0] == 28:  # If the file system is full...
+                print(f'Filesystem full')
