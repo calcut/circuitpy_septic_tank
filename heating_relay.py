@@ -60,8 +60,8 @@ def main():
     if AIO:
 
         mcu.wifi_connect()
-        # mcu.aio_setup(log_feed='relay-logging')
-        mcu.aio_setup()
+        mcu.aio_setup(log_feed='relay-logging')
+        # mcu.aio_setup()
         mcu.subscribe("target-temperature")
 
     def parse_feeds():
@@ -99,24 +99,24 @@ def main():
 
         if (time.monotonic() - timer_1s) >= 5:
             timer_1s = time.monotonic()
-            print
-            if htu.temperature < mcu.temperature_target: #Need to add hysteresis here!
-                print("temp too low, heating on")
-                relay_set_pin.value = True
-                relay_unset_pin.value = False
-                heating_requested = "ON"
-            else:
-                print("temp ok, heating off")
+            # print
+            # if htu.temperature < mcu.temperature_target: #Need to add hysteresis here!
+            #     print("temp too low, heating on")
+            #     relay_set_pin.value = True
+            #     relay_unset_pin.value = False
+            #     heating_requested = "ON"
+            # else:
+            #     print("temp ok, heating off")
 
-                relay_set_pin.value = False
-                relay_unset_pin.value = True
-                heating_requested = "OFF"
-            print("Temperature: %0.1f C" % htu.temperature)
-            print("Humidity: %0.1f %%" % htu.relative_humidity)
-            print("")
+            #     relay_set_pin.value = False
+            #     relay_unset_pin.value = True
+            #     heating_requested = "OFF"
+            # print("Temperature: %0.1f C" % htu.temperature)
+            # print("Humidity: %0.1f %%" % htu.relative_humidity)
+            # print("")
             
-            ts = mcu.get_timestamp()
-            mcu.logger.error(f"test {ts}")
+            mcu.logger.error(f"test")
+            mcu.logger.info(f"ping")
                 
 
         if (time.monotonic() - timer_30s) >= 30:

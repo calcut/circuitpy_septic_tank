@@ -46,7 +46,7 @@ class Mcu():
         self.rtc = rtc.RTC()
 
         self.logger = logging.getLogger('mcu')
-        self.logger.addHandler(FileHandler('log.txt'))
+        self.logger.addHandler(CustomLogHandler(self))
         self.logger.level = logging.INFO
         self.aio_log_feed = None
         
@@ -242,9 +242,6 @@ class Mcu():
         print("Connected to AIO")
         self.aio_connected = True
         self.io.subscribe_to_time("seconds")
-        if self.aio_log_feed:
-            self.logger.addHandler(AIOHandler(self.aio_log_feed, self)) 
-           
 
     def aio_subscribe_callback(self, client, userdata, topic, granted_qos):
         # This method is called when the client subscribes to a new feed.
@@ -337,10 +334,9 @@ class Mcu():
             else:
                 print(f'you typed: {input_line}')
 
-class AIOHandler(logging.LoggingHandler):
+class CustomLogHandler(logging.LoggingHandler):
 
-    def __init__(self, feed_name, mcu_device):
-        self._log_feed_name = feed_name
+    def __init__(self, mcu_device):
         self._device = mcu_device
 
     def emit(self, level, msg):
@@ -350,42 +346,30 @@ class AIOHandler(logging.LoggingHandler):
         :param msg: The core message
 
         """
-        print(f'publishing {self._log_feed_name} = {self.format(level, msg)}')
-        self._device.io.publish(self._log_feed_name, self.format(level, msg))
-
-
+        # Get a timestamp from the realtime clock
+        ts = self._device.get_timestamp()
         
-class FileHandler(logging.LoggingHandler):
+        # Print to Serial
+        text = f'{logging.level_for(level)} {msg}'
+        print(text)
 
-    def __init__(self, filename):
-        """Create an instance.
+        # Print to AIO
+        # This will easily get throttled.... need to consider
+        logfeed = self._device.aio_log_feed
+   
+        if self._device.aio_connected and logfeed:
+            try:
+                self._device.io.publish(logfeed, text)
+            except Exception as e:
+                print(e)
 
-        :param filename: the name of the file to which to write messages
-
-        """
-        self._filename = filename
-
-    def format(self, level, msg):
-        """Generate a string to log.
-
-        :param level: The level at which to log
-        :param msg: The core message
-
-        """
-        return super().format(level, msg) + '\r\n'
-
-    def emit(self, level, msg):
-        """Generate the message and write it to the UART.
-
-        :param level: The level at which to log
-        :param msg: The core message
-
-        """
-        print(f'trying to write {self.format(level, msg)} to {self._filename}')
+        # Print to logfile (if set writable at boot time)
+        text = f'{ts} {logging.level_for(level)} {msg}'
         try:
-            with open(self._filename, 'a+') as f:
-                f.write(self.format(level, msg))
+            with open('log.txt', 'w+') as f:
+                f.write(text)
+            print('wrote to log.txt')
         except OSError as e:
-            print(f'FS not writable {self.format(level, msg)}')
+            # print(f'FS not writable {self.format(level, msg)}')
             if e.args[0] == 28:  # If the file system is full...
                 print(f'Filesystem full')
