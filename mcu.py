@@ -393,7 +393,7 @@ class McuLogHandler(logging.LoggingHandler):
         try:
             with open('log.txt', 'a+') as f:
                 ts = self._device.get_timestamp() #timestamp from the RTC
-                text = f'{ts} {text}'
+                text = f'{ts} {text}\r\n'
                 f.write(text)
         except OSError as e:
             # print(f'FS not writable {self.format(level, msg)}')
