@@ -303,13 +303,13 @@ class Mcu():
         if self.aio_connected:
             if (time.monotonic() - self.timer_publish) >= self.aio_publish_interval:
                 self.timer_publish = time.monotonic()
-                print(f"Publishing to AIO:")
+                self.log.info(f"Publishing to AIO:")
                 try:
                     for feed_id in feeds.keys():
                         self.io.publish(feed_id, str(feeds[feed_id]), metadata=location)
-                        print(f"{feeds[feed_id]} --> {feed_id}")
+                        self.log.info(f"{feeds[feed_id]} --> {feed_id}")
                     if location:
-                        print(f"with location = {location}")
+                        self.log.info(f"with location = {location}")
 
                 except Exception as e:
                     self.log_exception(e)
@@ -321,7 +321,8 @@ class Mcu():
                 else:
                     # Only allowed 30 per minute with the free version of AIO
                     self.aio_publish_interval = 2 * len(feeds) +1
-                print(f"next publish in {self.aio_publish_interval}s")
+            else:
+                self.log.warning(f"Did not publish, throttle interval set to {self.aio_publish_interval}s")
 
     def get_timestamp(self):
         t = self.rtc.datetime
