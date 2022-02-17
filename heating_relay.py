@@ -8,6 +8,7 @@ import adafruit_htu31d
 from watchdog import WatchDogTimeout
 import supervisor
 import microcontroller
+import adafruit_logging as logging
 
 print('imported libraries')
 
@@ -15,6 +16,8 @@ print('imported libraries')
 # secrets.py file needs to be setup appropriately
 AIO = True
 # AIO = False
+
+DEMO = False
 
 def main():
 
@@ -29,6 +32,19 @@ def main():
 
     # instantiate the MCU helper class to set up the system
     mcu = Mcu(display=None)
+
+    # Choose minimum logging level to process
+    mcu.log.level = logging.INFO #i.e. ignore DEBUG messages
+    
+    # Example of log messages at different levels,
+    # use these instead of print() for more control.
+    if DEMO:
+        mcu.log.critical(f"test") 
+        mcu.log.error(f"test")
+        mcu.log.warning(f"test") 
+        mcu.log.info(f"ping")  #Will not be sent to AIO log feed, use as default
+        mcu.log.debug(f"ping") #Will not be sent to AIO log feed
+
     # Check what devices are present on the i2c bus
     mcu.i2c_identify(i2c_dict)
 
@@ -36,15 +52,16 @@ def main():
     try:
         htu = adafruit_htu31d.HTU31D(mcu.i2c)
         htu.heater = False
-        print(f'found HTU31D')
+        mcu.log.info(f'found HTU31D')
         mcu.pixel[0] = mcu.pixel.GREEN
         mcu.pixel.brightness = 0.05
 
     except Exception as e:
-        print(e)
+        mcu.log.error(e)
         mcu.pixel[0] = mcu.pixel.RED
 
-
+    # Setup for Latching Relay Featherwing 
+    # These signals are set by soldering wires
     relay_set_pin = digitalio.DigitalInOut(board.D11)
     relay_set_pin.direction = digitalio.Direction.OUTPUT
     relay_set_pin.value = False
@@ -54,14 +71,15 @@ def main():
     relay_unset_pin.value = False
 
     heating_requested = "OFF"
-    mcu.temperature_target = 16
 
+    # Store an initial target temperature as an attribute of the mcu object
+    # This saves it for access from other functions
+    mcu.temperature_target = 16
 
     if AIO:
 
         mcu.wifi_connect()
         mcu.aio_setup(log_feed='relay-logging')
-        # mcu.aio_setup()
         mcu.subscribe("target-temperature")
 
     def parse_feeds():
@@ -79,7 +97,7 @@ def main():
         if mcu.aio_connected:
             feeds['temperature-hallway'] = round(htu.temperature, 2)
             feeds['humidity-hallway'] = round(htu.relative_humidity, 2)
-            feeds['heating-requested'] = heating_requested
+            # feeds['heating-requested'] = heating_requested
             #This will automatically limit its rate to not get throttled by AIO
             mcu.aio_send(feeds, aio_plus=False)
 
@@ -92,33 +110,34 @@ def main():
 
         if (time.monotonic() - timer_100ms) >= 0.1:
             timer_100ms = time.monotonic()
-
             mcu.watchdog.feed()
             mcu.aio_receive()
             parse_feeds()
 
-        if (time.monotonic() - timer_1s) >= 5:
+        if (time.monotonic() - timer_1s) >= 1:
             timer_1s = time.monotonic()
-            # print
-            # if htu.temperature < mcu.temperature_target: #Need to add hysteresis here!
-            #     print("temp too low, heating on")
-            #     relay_set_pin.value = True
-            #     relay_unset_pin.value = False
-            #     heating_requested = "ON"
-            # else:
-            #     print("temp ok, heating off")
+            mcu.led.value = not(mcu.led.value)
 
-            #     relay_set_pin.value = False
-            #     relay_unset_pin.value = True
-            #     heating_requested = "OFF"
-            # print("Temperature: %0.1f C" % htu.temperature)
-            # print("Humidity: %0.1f %%" % htu.relative_humidity)
-            # print("")
+            # 0.2 degrees hysteresis
+            if heating_requested == "OFF":
+                if htu.temperature < mcu.temperature_target -0.2:
+                    mcu.log.warning((f'Temperature={htu.temperature:0.1f}C '
+                                    + f'Target={mcu.temperature_target:0.1f}C '
+                                    + f'turning heating on'))
+                    relay_unset_pin.value = False
+                    relay_set_pin.value = True
+                    heating_requested = "ON"
+                    mcu.io.publish('heating-requested', heating_requested)
+            else:
+                if htu.temperature > mcu.temperature_target +0.2:
+                    mcu.log.warning(f'Temperature={htu.temperature:0.1f}C '
+                                    + f'Target={mcu.temperature_target:0.1f}C '
+                                    + 'turning heating off')
+                    relay_set_pin.value = False
+                    relay_unset_pin.value = True
+                    heating_requested = "OFF"
+                    mcu.io.publish('heating-requested', heating_requested)
             
-            mcu.logger.error(f"test")
-            mcu.logger.info(f"ping")
-                
-
         if (time.monotonic() - timer_30s) >= 30:
             timer_30s = time.monotonic()            
             publish_feeds()
@@ -129,6 +148,8 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print('Code Stopped by Keyboard Interrupt')
+        # May want to add code to stop gracefully here 
+        # e.g. turn off relays or pumps
         
     except WatchDogTimeout:
         print('Code Stopped by WatchDog Timeout!')
