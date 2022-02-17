@@ -394,6 +394,9 @@ class McuLogHandler(logging.LoggingHandler):
         try:
             with open('log.txt', 'a+') as f:
                 ts = self._device.get_timestamp() #timestamp from the RTC
+                if ts[0:4] == "2000":
+                    # if the time has not been set yet, just show the seconds
+                    ts = ts[-5:]
                 text = f'{ts} {text}\r\n'
                 f.write(text)
         except OSError as e:
