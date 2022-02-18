@@ -1,6 +1,6 @@
 import time
 import board
-from mcu import Mcu
+from circuitpy_mcu.mcu import Mcu
 import digitalio
 import adafruit_htu31d
 
