@@ -9,6 +9,7 @@ from watchdog import WatchDogTimeout
 import supervisor
 import microcontroller
 import adafruit_logging as logging
+import traceback
 
 print('imported libraries')
 
@@ -92,14 +93,16 @@ def main():
 
     def publish_feeds():
         # AIO limits to 30 data points per minute in the free version
-        # Set publish interval accordingly
         feeds = {}
         if mcu.aio_connected:
             feeds['temperature-hallway'] = round(htu.temperature, 2)
             feeds['humidity-hallway'] = round(htu.relative_humidity, 2)
             # feeds['heating-requested'] = heating_requested
-            #This will automatically limit its rate to not get throttled by AIO
-            mcu.aio_send(feeds, aio_plus=False)
+
+            # In order to prevent being throttled by AIO, aio_send() will not 
+            # publish if called too often.  Try to avoid sending
+            # more than 30 updates per minute
+            mcu.aio_send(feeds)
 
 
     timer_100ms = 0
@@ -139,9 +142,8 @@ def main():
                     mcu.io.publish('heating-requested', heating_requested)
             
         if (time.monotonic() - timer_30s) >= 30:
-            timer_30s = time.monotonic()            
+            timer_30s = time.monotonic()
             publish_feeds()
-
 
 if __name__ == "__main__":
     try:
@@ -159,7 +161,11 @@ if __name__ == "__main__":
         time.sleep(2)
         microcontroller.reset()
 
-    # except Exception as e:
-    #     print(f'caught exception {e}')
-    #     time.sleep(5)
-    #     supervisor.reload()
+    except Exception as e:
+        print(f'Code stopped by unhandled exception:')
+        print(traceback.format_exception(None, e, e.__traceback__))
+        # Can we log here?
+        print('Performing a hard reset in 15s')
+        time.sleep(15) #Make sure this is shorter than watchdog timeout
+        # supervisor.reload()
+        microcontroller.reset()

@@ -27,6 +27,8 @@ import ssl
 import socketpool
 import adafruit_minimqtt.adafruit_minimqtt as MQTT
 from adafruit_io.adafruit_io import IO_MQTT
+from adafruit_io.adafruit_io_errors import AdafruitIO_ThrottleError
+
 try:
     from secrets import secrets
 except ImportError:
@@ -48,8 +50,10 @@ class Mcu():
         self.aio_connected = False
         self.aio_log_feed = None
         self.feeds = {} # A dict to store the values of AIO feeds
-        self.aio_publish_interval = 5 #Just an initial value CHANGE THIS TO SOMETHING THAT TRACKS THE THROTTLED FEED
+        self.aio_interval_minimum = 2 #Just an initial value, will be updated in code
+        self.aio_throttled = False
         self.timer_publish = time.monotonic()
+        self.timer_throttled = time.monotonic()
 
         # Real Time Clock in ESP32-S2 can be used to track timestamps
         self.rtc = rtc.RTC()
@@ -257,6 +261,8 @@ class Mcu():
         self.aio_connected = True
         self.pixel[0] = self.pixel.MAGENTA
         self.io.subscribe_to_time("seconds")
+        self.io.subscribe_to_throttling()
+        self.io.subscribe_to_errors()
 
     def aio_subscribe_callback(self, client, userdata, topic, granted_qos):
         # This method is called when the client subscribes to a new feed.
@@ -289,40 +295,56 @@ class Mcu():
 
     def aio_receive(self):
         if self.aio_connected:
+            if self.aio_throttled:
+                if (time.monotonic() - self.timer_throttled) >= 30:
+                    # Reset the throttled flag if it has been over 30s
+                    self.aio_throttled = False
+                    self.log.warning(f'AIO throttle flag released. minimum interval currently {self.aio_interval_minimum}')
             try:
-                # gc.collect() #May prevent occasional memory allocation errors.
-                self.io.loop(timeout=0.01)
+                self.io.loop(timeout=0.01) #Is this too short a timeout??
+            except AdafruitIO_ThrottleError as e:
+                self.log_exception(e)
+                self.aio_interval_minimum += 1
+                self.aio_throttled = True
+                self.timer_throttled = time.monotonic()
+                self.log.warning(f'AIO Throttled, increasing publish interval to {self.aio_interval_minimum}')
             except MemoryError as e:
+                # self.log_exception(e)
+                # https://github.com/adafruit/Adafruit_CircuitPython_MiniMQTT/issues/101
                 self.log.warning("MemoryError: memory allocation failed, ignoring")
             except Exception as e:
                 self.log_exception(e)
                 self.log.warning(f'AIO receive error, trying longer timeout')
                 self.io.loop(timeout=0.5) 
 
-    def aio_send(self, feeds, location=None, aio_plus=False):
+    def aio_send(self, feeds, location=None):
         if self.aio_connected:
-            if (time.monotonic() - self.timer_publish) >= self.aio_publish_interval:
-                self.timer_publish = time.monotonic()
-                self.log.info(f"Publishing to AIO:")
-                try:
-                    for feed_id in feeds.keys():
-                        self.io.publish(feed_id, str(feeds[feed_id]), metadata=location)
-                        self.log.info(f"{feeds[feed_id]} --> {feed_id}")
-                    if location:
-                        self.log.info(f"with location = {location}")
+            if not self.aio_throttled:
+                if (time.monotonic() - self.timer_publish) >= self.aio_interval_minimum:
+                    self.timer_publish = time.monotonic()
+                    self.log.info(f"Publishing to AIO:")
+                    try:
+                        for feed_id in feeds.keys():
+                            self.io.publish(feed_id, str(feeds[feed_id]), metadata=location)
+                            self.log.info(f"{feeds[feed_id]} --> {feed_id}")
+                        if location:
+                            self.log.info(f"with location = {location}")
 
-                except Exception as e:
-                    self.log_exception(e)
-                    self.log.error(f"Error publishing data to AIO")
-                
-                # Update the publish interval to not get throttled by AIO
-                if aio_plus:
-                    self.aio_publish_interval = len(feeds) +1
+                    except Exception as e:
+                        self.log_exception(e)
+                        self.log.error(f"Error publishing data to AIO")
+
+                    # Clamp the minimum interval based on number of feeds and a
+                    # rate of 30 updates per minute for AIO free version.
+                    min_interval = (2 * len(feeds) +1)
+                    if self.aio_interval_minimum < min_interval:
+                        self.aio_interval_minimum = min_interval
+
                 else:
-                    # Only allowed 30 per minute with the free version of AIO
-                    self.aio_publish_interval = 2 * len(feeds) +1
+                    self.log.debug(f"Did not publish, aio_interval_minimum set to {self.aio_interval_minimum}s"
+                                    +f" Time remaining: {int(self.aio_interval_minimum - (time.monotonic() - self.timer_publish))}s")
             else:
-                self.log.warning(f"Did not publish, throttle interval set to {self.aio_publish_interval}s")
+                self.log.warning(f'Did not publish, throttled flag = {self.aio_throttled}')
 
     def get_timestamp(self):
         t = self.rtc.datetime
@@ -380,14 +402,18 @@ class McuLogHandler(logging.LoggingHandler):
 
         # Print to AIO, only if level is WARNING or higher
         #   AND we are connected to AIO, AND a logfeed has been specified
-        # This could easily get throttled.... need to consider
+        #   AND we are not currently throttled
         logfeed = self._device.aio_log_feed
    
-        if self._device.aio_connected and logfeed and level >= logging.WARNING:
+        if (self._device.aio_connected 
+            and logfeed
+            and not self._device.aio_throttled
+            and level >= logging.WARNING):
+
             try:
                 self._device.io.publish(logfeed, text)
             except Exception as e:
-                print(e)
+                print(f'Error publishing to AIO log: {e}')
 
         # Print to log.txt with timestamp 
         # only works if flash is set writable at boot time
