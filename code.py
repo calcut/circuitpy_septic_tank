@@ -3,7 +3,7 @@
 import supervisor
 import time
 
-code = 'heating_relay.py'
+code = 'septic_tank.py'
 # print('booted')
 
 
