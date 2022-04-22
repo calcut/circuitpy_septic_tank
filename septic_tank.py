@@ -18,7 +18,7 @@ print('imported libraries')
 # Set AIO = True to use Wifi and Adafruit IO connection
 # secrets.py file needs to be setup appropriately
 # AIO = True
-AIO = False
+AIO = True
 
 def main():
 
@@ -27,8 +27,9 @@ def main():
     i2c_dict = {
         '0x0B' : 'Battery Monitor LC709203', # Built into ESP32S2 feather 
         '0x60' : 'Thermocouple Amp MCP9600',
-        '0x62' : 'DAC MCP4725',
-        '0x70' : 'Motor Featherwing PCA9685', #Solder bridge on address bit A4
+        '0x61' : 'Thermocouple Amp MCP9600',
+        '0x62' : 'Thermocouple Amp MCP9600',
+        '0x63' : 'Thermocouple Amp MCP9600',
         '0x72' : 'Sparkfun LCD Display',
         '0x77' : 'Temp/Humidity/Pressure BME280' # Built into some ESP32S2 feathers 
     }
@@ -48,10 +49,14 @@ def main():
         mcu.attach_display(display) # to show wifi/AIO status etc.
         display.show_text(__file__) # shows current filename
         mcu.log.info(f'found Display')
-        probe0 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x60)
-        mcu.log.info(f'found probe0')
-        pump = MotorKit(i2c=mcu.i2c, address=0x70)
-        mcu.log.info('found motor featherwing')
+        probe1 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x60)
+        mcu.log.info(f'found probe1')
+        probe2 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x61)
+        mcu.log.info(f'found probe2')
+        probe3 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x62)
+        mcu.log.info(f'found probe3')
+        probe4 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x63)
+        mcu.log.info(f'found probe4')
         mcu.pixel[0] = mcu.pixel.GREEN
         mcu.pixel.brightness = 0.05
 
@@ -60,10 +65,10 @@ def main():
         mcu.pixel[0] = mcu.pixel.RED
 
     # Setup labels to be displayed on LCD
-    display.labels[0]='T0='
-    display.labels[1]='T1='
-    display.labels[2]='T2='
-    display.labels[3]='AD0='
+    display.labels[0]='T1='
+    display.labels[1]='T2='
+    display.labels[2]='T3='
+    display.labels[3]='T4='
 
     if AIO:
 
@@ -94,7 +99,10 @@ def main():
         # Set publish interval accordingly
         feeds = {}
         if mcu.aio_connected:
-            feeds['temperature0'] = round(probe0.temperature, 2)
+            feeds['temperature1'] = round(probe1.temperature, 2)
+            feeds['temperature2'] = round(probe2.temperature, 2)
+            feeds['temperature3'] = round(probe3.temperature, 2)
+            feeds['temperature4'] = round(probe4.temperature, 2)
             location = "57.2445673, -4.3978963, 220" #Gorthleck, as an example
 
             #This will automatically limit its rate to not get throttled by AIO
@@ -104,10 +112,10 @@ def main():
         #ADC max value 50819 and max voltage 2.55V has been determined manually
         #This may vary board to board.
 
-        display.values[0] = f'{probe0.temperature:4.1f} '
-        # display.values[1] = f'{probe1.temperature: 4.1f} '
-        # display.values[2] = f'{probe2.temperature: 4.1f} '
-        # display.values[3] = f'{ADC0_voltage: 4.2f} '
+        display.values[0] = f'{probe1.temperature:4.1f} '
+        display.values[1] = f'{probe2.temperature:4.1f} '
+        display.values[2] = f'{probe3.temperature:4.1f} '
+        display.values[3] = f'{probe4.temperature:4.1f} '
         # display.values[4] = f'{ADC1_voltage: 4.2f} '
         # display.values[5] = f'{dac.voltage: 4.2f} '
         # display.values[6] = f''
@@ -119,8 +127,7 @@ def main():
     timer_B = 0
     timer_C = 0
 
-    pump.motor1.throttle = 0.6
-    mcu.log.info('driving pump')
+    # mcu.log.info('driving pump')
     # pump.motor2.throttle = 0
     # pump.motor3.throttle = 0
     # pump.motor4.throttle = 0
