@@ -276,9 +276,9 @@ if __name__ == "__main__":
         print('Code Stopped by WatchDog Timeout!')
         # supervisor.reload()
         # NB, sometimes soft reset is not enough! need to do hard reset here
-        # print('Performing hard reset')
-        # time.sleep(2)
-        # microcontroller.reset()
+        print('Performing hard reset in 15s')
+        time.sleep(15)
+        microcontroller.reset()
 
     except Exception as e:
         print(f'Code stopped by unhandled exception:')
@@ -287,4 +287,4 @@ if __name__ == "__main__":
         print('Performing a hard reset in 15s')
         time.sleep(15) #Make sure this is shorter than watchdog timeout
         # supervisor.reload()
-        # microcontroller.reset()
+        microcontroller.reset()
