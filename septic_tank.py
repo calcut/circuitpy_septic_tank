@@ -1,7 +1,7 @@
 import time
 import board
 from circuitpy_mcu.mcu import Mcu
-from circuitpy_mcu.display import LCD_16x2
+from circuitpy_mcu.display import LCD_20x4
 import adafruit_mcp9600
 from adafruit_motorkit import MotorKit
 from analogio import AnalogIn
@@ -13,7 +13,9 @@ import microcontroller
 import adafruit_logging as logging
 import traceback
 
-print('imported libraries')
+__version__ = "0.0.0-auto.0"
+__repo__ = "https://github.com/calcut/circuitpy-septic_tank"
+__filename__ = "septic_tank.py"
 
 # Set AIO = True to use Wifi and Adafruit IO connection
 # secrets.py file needs to be setup appropriately
@@ -45,9 +47,9 @@ def main():
 
     # instantiate i2c devices
     try:
-        display = LCD_16x2(mcu.i2c)
+        display = LCD_20x4(mcu.i2c)
         mcu.attach_display(display) # to show wifi/AIO status etc.
-        display.show_text(__file__) # shows current filename
+        display.show_text(__filename__) # shows current filename
         mcu.log.info(f'found Display')
         probe1 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x60)
         mcu.log.info(f'found probe1')
@@ -75,7 +77,6 @@ def main():
         mcu.wifi_connect()
         mcu.aio_setup(log_feed=None)
         mcu.subscribe('led-color')
-        mcu.subscribe("dac-voltage")
         mcu.subscribe("target-temperature")
 
     def parse_feeds():
@@ -120,7 +121,7 @@ def main():
         # display.values[5] = f'{dac.voltage: 4.2f} '
         # display.values[6] = f''
         # display.values[7] = f''
-        display.show_data()
+        display.show_data_20x4()
 
 
     timer_A = 0
@@ -162,15 +163,15 @@ if __name__ == "__main__":
         print('Code Stopped by WatchDog Timeout!')
         # supervisor.reload()
         # NB, sometimes soft reset is not enough! need to do hard reset here
-        print('Performing hard reset')
-        time.sleep(2)
+        print('Performing hard reset in 15s')
+        time.sleep(15)
         microcontroller.reset()
 
     except Exception as e:
         print(f'Code stopped by unhandled exception:')
         print(traceback.format_exception(None, e, e.__traceback__))
         # Can we log here?
-        # print('Performing a hard reset in 15s')
-        # time.sleep(15) #Make sure this is shorter than watchdog timeout
+        print('Performing a hard reset in 15s')
+        time.sleep(15) #Make sure this is shorter than watchdog timeout
         # supervisor.reload()
-        # microcontroller.reset()
+        microcontroller.reset()
