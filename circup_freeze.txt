@@ -1,0 +1,11 @@
+Found device at /Volumes/CIRCUITPY, running CircuitPython 7.2.5.
+adafruit_datetime==1.1.7
+adafruit_requests==1.12.0
+adafruit_ticks==1.0.2
+neopixel==6.3.0
+sparkfun_serlcd==1.0.4
+adafruit_bus_device==5.1.8
+adafruit_io==5.6.5
+adafruit_logging==3.7.5
+adafruit_minimqtt==5.3.0
+adafruit_register==1.9.8
