@@ -1,7 +1,7 @@
 import time
 import board
-from lib.circuitpy_mcu.mcu import Mcu
-from lib.circuitpy_mcu.display import LCD_20x4
+from circuitpy_mcu.mcu import Mcu
+from circuitpy_mcu.display import LCD_20x4
 import busio
 
 # scheduling and event/error handling libs
@@ -13,6 +13,7 @@ import traceback
 
 __version__ = "0.0.0-auto.0"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
+__filename__ = "methane_gascard.py"
 
 # Set AIO = True to use Wifi and Adafruit IO connection
 # secrets.py file needs to be setup appropriately
@@ -172,7 +173,7 @@ def main():
     try:
         display = LCD_20x4(mcu.i2c)
         mcu.attach_display(display)
-        display.show_text(__file__) # shows current filename
+        display.show_text(__filename__)
         display.set_cursor(0,2)
         display.write('Waiting for Gascard')
 

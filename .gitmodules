@@ -1,3 +1,0 @@
-[submodule "lib/circuitpy_mcu"]
-	path = lib/circuitpy_mcu
-	url = https://github.com/calcut/circuitpy_mcu.git
