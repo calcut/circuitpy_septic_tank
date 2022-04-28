@@ -2,9 +2,11 @@ import time
 import board
 from circuitpy_mcu.mcu import Mcu
 from circuitpy_mcu.display import LCD_20x4
+from circuitpy_mcu.DFRobot_PH import DFRobot_PH
 import adafruit_mcp9600
+import adafruit_ads1x15.ads1115 as ADS
+from adafruit_ads1x15.analog_in import AnalogIn
 from adafruit_motorkit import MotorKit
-from analogio import AnalogIn
 
 # scheduling and event/error handling libs
 from watchdog import WatchDogTimeout
@@ -20,7 +22,7 @@ __filename__ = "septic_tank.py"
 # Set AIO = True to use Wifi and Adafruit IO connection
 # secrets.py file needs to be setup appropriately
 # AIO = True
-AIO = True
+AIO = False
 
 def main():
 
@@ -28,6 +30,7 @@ def main():
     # Maybe useful for automatic configuration in future
     i2c_dict = {
         '0x0B' : 'Battery Monitor LC709203', # Built into ESP32S2 feather 
+        '0x48' : 'ADC for pH Probes ADC1115',
         '0x60' : 'Thermocouple Amp MCP9600',
         '0x61' : 'Thermocouple Amp MCP9600',
         '0x62' : 'Thermocouple Amp MCP9600',
@@ -66,11 +69,23 @@ def main():
         mcu.log_exception(e)
         mcu.pixel[0] = mcu.pixel.RED
 
+    try:
+        ph = DFRobot_PH()
+        ads = ADS.ADS1115(mcu.i2c)
+        ph_adc1 = AnalogIn(ads, ADS.P0)
+        ph_adc2 = AnalogIn(ads, ADS.P1)
+        ph_adc3 = AnalogIn(ads, ADS.P2)
+    except Exception as e:
+        mcu.log_exception(e)
+
     # Setup labels to be displayed on LCD
     display.labels[0]='T1='
     display.labels[1]='T2='
     display.labels[2]='T3='
     display.labels[3]='T4='
+    display.labels[4]='PH1='
+    display.labels[5]='PH2='
+    display.labels[6]='PH3='
 
     if AIO:
 
@@ -110,16 +125,18 @@ def main():
             mcu.aio_send(feeds, location)
 
     def update_display():
-        #ADC max value 50819 and max voltage 2.55V has been determined manually
-        #This may vary board to board.
+        ph1 = ph.read_PH(ph_adc1.voltage*1000) 
+        ph2 = ph.read_PH(ph_adc2.voltage*1000) 
+        ph3 = ph.read_PH(ph_adc3.voltage*1000) 
 
         display.values[0] = f'{probe1.temperature:4.1f} '
         display.values[1] = f'{probe2.temperature:4.1f} '
         display.values[2] = f'{probe3.temperature:4.1f} '
         display.values[3] = f'{probe4.temperature:4.1f} '
-        # display.values[4] = f'{ADC1_voltage: 4.2f} '
-        # display.values[5] = f'{dac.voltage: 4.2f} '
-        # display.values[6] = f''
+        
+        display.values[4] = f'{ph1: 4.2f} '
+        display.values[5] = f'{ph2: 4.2f} '
+        display.values[6] = f'{ph3: 4.2f} '
         # display.values[7] = f''
         display.show_data_20x4()
 
