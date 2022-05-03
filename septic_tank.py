@@ -75,17 +75,25 @@ def main():
         ph_adc1 = AnalogIn(ads, ADS.P0)
         ph_adc2 = AnalogIn(ads, ADS.P1)
         ph_adc3 = AnalogIn(ads, ADS.P2)
+
     except Exception as e:
-        mcu.log_exception(e)
+        mcu.log.info('ADC for pH probes not found')
+        ph = None
+
+    try:
+        mcu.attach_sd_card()
+    except Exception as e:
+        print(f'error attaching SD Card {e}')
 
     # Setup labels to be displayed on LCD
     display.labels[0]='T1='
     display.labels[1]='T2='
     display.labels[2]='T3='
     display.labels[3]='T4='
-    display.labels[4]='PH1='
-    display.labels[5]='PH2='
-    display.labels[6]='PH3='
+    if ph:
+        display.labels[4]='PH1='
+        display.labels[5]='PH2='
+        display.labels[6]='PH3='
 
     if AIO:
 
@@ -125,20 +133,24 @@ def main():
             mcu.aio_send(feeds, location)
 
     def update_display():
-        ph1 = ph.read_PH(ph_adc1.voltage*1000) 
-        ph2 = ph.read_PH(ph_adc2.voltage*1000) 
-        ph3 = ph.read_PH(ph_adc3.voltage*1000) 
 
         display.values[0] = f'{probe1.temperature:4.1f} '
         display.values[1] = f'{probe2.temperature:4.1f} '
         display.values[2] = f'{probe3.temperature:4.1f} '
         display.values[3] = f'{probe4.temperature:4.1f} '
-        
-        display.values[4] = f'{ph1: 4.2f} '
-        display.values[5] = f'{ph2: 4.2f} '
-        display.values[6] = f'{ph3: 4.2f} '
+
+        if ph:
+            ph1 = ph.read_PH(ph_adc1.voltage*1000) 
+            ph2 = ph.read_PH(ph_adc2.voltage*1000) 
+            ph3 = ph.read_PH(ph_adc3.voltage*1000) 
+
+            display.values[4] = f'{ph1: 4.2f} '
+            display.values[5] = f'{ph2: 4.2f} '
+            display.values[6] = f'{ph3: 4.2f} '
+
         # display.values[7] = f''
         display.show_data_20x4()
+        mcu.log.info(f'{probe1.temperature:4.1f} ')
 
 
     timer_A = 0
