@@ -1,5 +1,4 @@
 import time
-import board
 from circuitpy_mcu.mcu import Mcu
 from circuitpy_mcu.display import LCD_20x4
 from circuitpy_mcu.DFRobot_PH import DFRobot_PH
@@ -21,8 +20,8 @@ __filename__ = "septic_tank.py"
 
 # Set AIO = True to use Wifi and Adafruit IO connection
 # secrets.py file needs to be setup appropriately
-# AIO = True
-AIO = False
+AIO = True
+# AIO = False
 
 def main():
 
@@ -150,7 +149,6 @@ def main():
 
         # display.values[7] = f''
         display.show_data_20x4()
-        mcu.log.info(f'{probe1.temperature:4.1f} ')
 
 
     timer_A = 0
@@ -178,6 +176,7 @@ def main():
         if (time.monotonic() - timer_C) >= 30:
             timer_C = time.monotonic()
             publish_feeds()
+            mcu.log.info(f'Tprobes {probe1.temperature} {probe2.temperature} {probe3.temperature} {probe4.temperature}')
 
 
 if __name__ == "__main__":
