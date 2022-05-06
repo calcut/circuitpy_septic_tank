@@ -34,6 +34,7 @@ def main():
         '0x61' : 'Thermocouple Amp MCP9600',
         '0x62' : 'Thermocouple Amp MCP9600',
         '0x63' : 'Thermocouple Amp MCP9600',
+        '0x68' : 'Realtime Clock PCF8523', # On Adalogger Featherwing
         '0x72' : 'Sparkfun LCD Display',
         '0x77' : 'Temp/Humidity/Pressure BME280' # Built into some ESP32S2 feathers 
     }
@@ -68,6 +69,18 @@ def main():
         mcu.log_exception(e)
         mcu.pixel[0] = mcu.pixel.RED
 
+    # try:
+    #     probe1 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x60)
+    #     mcu.log.info(f'found probe1')
+    #     probe2 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x61)
+    #     mcu.log.info(f'found probe2')
+    #     probe3 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x62)
+    #     mcu.log.info(f'found probe3')
+    #     probe4 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x63)
+    #     mcu.log.info(f'found probe4')
+    # except Exception as e:
+    #     mcu.log.info('probes not found')
+
     try:
         ph = DFRobot_PH()
         ads = ADS.ADS1115(mcu.i2c)
@@ -79,10 +92,9 @@ def main():
         mcu.log.info('ADC for pH probes not found')
         ph = None
 
-    try:
-        mcu.attach_sd_card()
-    except Exception as e:
-        print(f'error attaching SD Card {e}')
+    mcu.attach_sdcard()
+    mcu.archive_file('log.txt')
+    mcu.archive_file('data.txt')
 
     # Setup labels to be displayed on LCD
     display.labels[0]='T1='
@@ -95,11 +107,8 @@ def main():
         display.labels[6]='PH3='
 
     if AIO:
-
         mcu.wifi_connect()
         mcu.aio_setup(log_feed=None)
-        mcu.subscribe('led-color')
-        mcu.subscribe("target-temperature")
 
     def parse_feeds():
         if mcu.aio_connected:
@@ -131,6 +140,22 @@ def main():
             #This will automatically limit its rate to not get throttled by AIO
             mcu.aio_send(feeds, location)
 
+    def log_sdcard():
+        if mcu.sdcard:
+            text = '{} {:.3f} {:.3f} {:.3f} {:.3f}'.format(
+                mcu.get_timestamp(), #timestamp from the RTC
+                probe1.temperature,
+                probe2.temperature,
+                probe3.temperature,
+                probe4.temperature,
+                )
+            try:
+                with open('/sd/data.txt', 'a') as f:
+                    f.write(text)
+                    mcu.log.info(f'{text} -> /sd/data.txt')
+            except OSError as e:
+                print(f'SDCARD FS not writable {e}')
+
     def update_display():
 
         display.values[0] = f'{probe1.temperature:4.1f} '
@@ -155,11 +180,6 @@ def main():
     timer_B = 0
     timer_C = 0
 
-    # mcu.log.info('driving pump')
-    # pump.motor2.throttle = 0
-    # pump.motor3.throttle = 0
-    # pump.motor4.throttle = 0
-
     while True:
         mcu.read_serial()
 
@@ -176,8 +196,7 @@ def main():
         if (time.monotonic() - timer_C) >= 30:
             timer_C = time.monotonic()
             publish_feeds()
-            mcu.log.info(f'Tprobes {probe1.temperature} {probe2.temperature} {probe3.temperature} {probe4.temperature}')
-
+            log_sdcard()
 
 if __name__ == "__main__":
     try:
