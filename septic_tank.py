@@ -20,8 +20,8 @@ __filename__ = "septic_tank.py"
 
 # Set AIO = True to use Wifi and Adafruit IO connection
 # secrets.py file needs to be setup appropriately
-# AIO = True
-AIO = False
+AIO = True
+# AIO = False
 
 PH_CHANNELS = 3
 
@@ -68,22 +68,17 @@ def main():
     # Instantiate thermocouple probes 
     tc_addresses = [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67]
     tc_channels = []
-    tc_values = []
 
     for addr in tc_addresses:
         try:
             tc = adafruit_mcp9600.MCP9600(mcu.i2c, address=addr)
             tc_channels.append(tc)
-            tc_values.append(0.0)
             print(f'Found thermocouple channel at address {addr:x}')
         except Exception as e:
             mcu.log.info(f'No thermocouple channel at {addr:x}')
 
-
-
     # Instantiate ph channels
     ph_channels = []
-    ph_values = []
     try:
         ph_converter = DFRobot_PH()
         ads = ADS.ADS1115(mcu.i2c)
@@ -94,8 +89,6 @@ def main():
 
         # Drop any unwanted/unused channels, as specified by PH_CHANNELS
         ph_channels = ph_channels[:PH_CHANNELS] 
-        for ph in ph_channels:
-            ph_values.append(0.0)
 
     except Exception as e:
         mcu.log.info('ADC for pH probes not found')
@@ -126,30 +119,31 @@ def main():
                     # Nothing is done with this currently
 
     def publish_feeds():
-        # AIO limits to 30 data points per minute in the free version
-        feeds = {}
-        if mcu.aio_connected:
-            for i in range(len(tc_channels)):
-                feeds[f'temperature{i+1}'] = f'{tc_values[i]:.3f}'
+        # AIO limits to 30 data points per minute and 10 feeds in the free version
+        if mcu.aio_connected and len(mcu.data) > 0:
 
-            for i in range(len(ph_channels)):
-                feeds[f'ph{i+1}'] = f'{ph_values[i]:.3f}'
-            
+            # Optionally filter e.g. to get <10 feeds
+            data = filter_data('TC', decimal_places=3)
+
             # location = "57.2445673, -4.3978963, 220" #Gorthleck, as an example
 
             #This will automatically limit its rate to not get throttled by AIO
-            mcu.aio_send(feeds, location=None)
+            mcu.aio_send(data, location=None)
 
     def log_sdcard():
         if mcu.sdcard:
             text = f'{mcu.get_timestamp()} '
+
             text += ' TC:'
-            for tc in range(len(tc_channels)):
-                text+= f' {tc_values[tc]:.3f}'
+            data = filter_data('TC', decimal_places=3)
+            for key in sorted(data):
+                text+= f' {data[key]:.3f}'
+
             text += ' PH:'
-            for ph in range(len(ph_channels)):
-                text+= f' {ph_values[ph]:.3f}'
-            
+            data = filter_data('PH', decimal_places=3)
+            for key in sorted(data):
+                text+= f' {data[key]:.3f}'
+           
             try:
                 with open('/sd/data.txt', 'a') as f:
                     f.write(text)
@@ -157,45 +151,39 @@ def main():
             except OSError as e:
                 print(f'SDCARD FS not writable {e}')
 
-    def display_ph():
-
-        # clear display labels/data
-        for i in range(len(display.labels)):
-            display.labels[i]=''
-            display.values[i]=''
+    def capture_data():
+        mcu.data = {}
 
         for ph in ph_channels:
             i = ph_channels.index(ph)
-            ph_values[i] = ph_converter.read_PH(ph.voltage*1000)
-            display.labels[i] = f'PH{i+1}='
-            display.values[i] = f'{ph_values[i]:4.1f}'
-
-        display.show_data_20x4()
-
-    def display_temperature():
-
-        # clear display labels/data
-        for i in range(len(display.labels)):
-            display.labels[i]=''
-            display.values[i]=''
-
+            mcu.data[f'PH{i+1}'] = ph_converter.read_PH(ph.voltage*1000)
+            
         for tc in tc_channels:
             i = tc_channels.index(tc)
-            tc_values[i] = tc.temperature
-            display.labels[i] = f'T{i+1}='
-            display.values[i] = f'{tc_values[i]:4.1f}'
+            mcu.data[f'TC{i+1}'] = tc.temperature
 
-        display.show_data_20x4()
+    def filter_data(filter_string=None, decimal_places=1):
 
-    timer_A = time.monotonic()
-    timer_B = time.monotonic()
-    timer_C = time.monotonic()
+        data = {}
+        for key, value in mcu.data.items():
+            if filter_string:
+                if key.startswith(filter_string):
+                    data[key] = round(value, decimal_places)
+            else:
+                data[key] = round(value, decimal_places)
+
+        return data
+
+
+    timer_A = 0
+    timer_B = 0
+    timer_C = 0
     display_page = 1
 
     while True:
         mcu.read_serial()
 
-        if (time.monotonic() - timer_A) >= 4:
+        if (time.monotonic() - timer_A) >= 5:
             timer_A = time.monotonic()
             if display_page == 1:
                 display_page = 2
@@ -205,12 +193,14 @@ def main():
         if (time.monotonic() - timer_B) >= 1:
             timer_B = time.monotonic()
             mcu.watchdog.feed()
+            capture_data()
             mcu.aio_receive()
             parse_feeds()
             if display_page == 1:
-                display_temperature()
+                data =  filter_data('TC', decimal_places=1)
             if display_page == 2:
-                display_ph()
+                data =  filter_data('PH', decimal_places=1)
+            display.show_data_20x4(data)
 
         if (time.monotonic() - timer_C) >= 30:
             timer_C = time.monotonic()
