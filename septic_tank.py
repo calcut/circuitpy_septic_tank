@@ -143,10 +143,9 @@ def main():
             data = filter_data('PH', decimal_places=3)
             for key in sorted(data):
                 text+= f' {data[key]:.3f}'
-           
             try:
                 with open('/sd/data.txt', 'a') as f:
-                    f.write(text)
+                    f.write(text+'\n')
                     mcu.log.info(f'{text} -> /sd/data.txt')
             except OSError as e:
                 print(f'SDCARD FS not writable {e}')
@@ -185,7 +184,7 @@ def main():
 
         if (time.monotonic() - timer_A) >= 5:
             timer_A = time.monotonic()
-            if display_page == 1:
+            if display_page == 1 and len(ph_channels) > 0:
                 display_page = 2
             else:
                 display_page = 1
