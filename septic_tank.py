@@ -20,8 +20,10 @@ __filename__ = "septic_tank.py"
 
 # Set AIO = True to use Wifi and Adafruit IO connection
 # secrets.py file needs to be setup appropriately
-AIO = True
-# AIO = False
+# AIO = True
+AIO = False
+
+PH_CHANNELS = 3
 
 def main():
 
@@ -34,6 +36,10 @@ def main():
         '0x61' : 'Thermocouple Amp MCP9600',
         '0x62' : 'Thermocouple Amp MCP9600',
         '0x63' : 'Thermocouple Amp MCP9600',
+        '0x64' : 'Thermocouple Amp MCP9600',
+        '0x65' : 'Thermocouple Amp MCP9600',
+        '0x66' : 'Thermocouple Amp MCP9600',
+        '0x67' : 'Thermocouple Amp MCP9600',
         '0x68' : 'Realtime Clock PCF8523', # On Adalogger Featherwing
         '0x72' : 'Sparkfun LCD Display',
         '0x77' : 'Temp/Humidity/Pressure BME280' # Built into some ESP32S2 feathers 
@@ -48,63 +54,57 @@ def main():
     # Check what devices are present on the i2c bus
     mcu.i2c_identify(i2c_dict)
 
-    # instantiate i2c devices
+
+    # Instantiate i2c display
     try:
         display = LCD_20x4(mcu.i2c)
         mcu.attach_display(display) # to show wifi/AIO status etc.
         display.show_text(__filename__) # shows current filename
         mcu.log.info(f'found Display')
-        probe1 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x60)
-        mcu.log.info(f'found probe1')
-        probe2 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x61)
-        mcu.log.info(f'found probe2')
-        probe3 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x62)
-        mcu.log.info(f'found probe3')
-        probe4 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x63)
-        mcu.log.info(f'found probe4')
-        mcu.pixel[0] = mcu.pixel.GREEN
-        mcu.pixel.brightness = 0.05
-
     except Exception as e:
         mcu.log_exception(e)
-        mcu.pixel[0] = mcu.pixel.RED
 
-    # try:
-    #     probe1 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x60)
-    #     mcu.log.info(f'found probe1')
-    #     probe2 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x61)
-    #     mcu.log.info(f'found probe2')
-    #     probe3 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x62)
-    #     mcu.log.info(f'found probe3')
-    #     probe4 = adafruit_mcp9600.MCP9600(mcu.i2c, address=0x63)
-    #     mcu.log.info(f'found probe4')
-    # except Exception as e:
-    #     mcu.log.info('probes not found')
 
+    # Instantiate thermocouple probes 
+    tc_addresses = [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67]
+    tc_channels = []
+    tc_values = []
+
+    for addr in tc_addresses:
+        try:
+            tc = adafruit_mcp9600.MCP9600(mcu.i2c, address=addr)
+            tc_channels.append(tc)
+            tc_values.append(0.0)
+            print(f'Found thermocouple channel at address {addr:x}')
+        except Exception as e:
+            mcu.log.info(f'No thermocouple channel at {addr:x}')
+
+
+
+    # Instantiate ph channels
+    ph_channels = []
+    ph_values = []
     try:
-        ph = DFRobot_PH()
+        ph_converter = DFRobot_PH()
         ads = ADS.ADS1115(mcu.i2c)
-        ph_adc1 = AnalogIn(ads, ADS.P0)
-        ph_adc2 = AnalogIn(ads, ADS.P1)
-        ph_adc3 = AnalogIn(ads, ADS.P2)
+        ph_channels.append(AnalogIn(ads, ADS.P0))
+        ph_channels.append(AnalogIn(ads, ADS.P1))
+        ph_channels.append(AnalogIn(ads, ADS.P2))
+        ph_channels.append(AnalogIn(ads, ADS.P3))
+
+        # Drop any unwanted/unused channels, as specified by PH_CHANNELS
+        ph_channels = ph_channels[:PH_CHANNELS] 
+        for ph in ph_channels:
+            ph_values.append(0.0)
 
     except Exception as e:
         mcu.log.info('ADC for pH probes not found')
-        ph = None
 
+    mcu.watchdog.feed()
     mcu.attach_sdcard()
     mcu.archive_file('log.txt')
     mcu.archive_file('data.txt')
-
-    # Setup labels to be displayed on LCD
-    display.labels[0]='T1='
-    display.labels[1]='T2='
-    display.labels[2]='T3='
-    display.labels[3]='T4='
-    if ph:
-        display.labels[4]='PH1='
-        display.labels[5]='PH2='
-        display.labels[6]='PH3='
+    mcu.watchdog.feed()
 
     if AIO:
         mcu.wifi_connect()
@@ -122,33 +122,34 @@ def main():
                     display.set_fast_backlight_rgb(r, g, b)
 
                 if feed_id == 'target-temperature':
-
                     temp_target = float(payload)
                     # Nothing is done with this currently
 
     def publish_feeds():
         # AIO limits to 30 data points per minute in the free version
-        # Set publish interval accordingly
         feeds = {}
         if mcu.aio_connected:
-            feeds['temperature1'] = round(probe1.temperature, 2)
-            feeds['temperature2'] = round(probe2.temperature, 2)
-            feeds['temperature3'] = round(probe3.temperature, 2)
-            feeds['temperature4'] = round(probe4.temperature, 2)
-            location = "57.2445673, -4.3978963, 220" #Gorthleck, as an example
+            for i in range(len(tc_channels)):
+                feeds[f'temperature{i+1}'] = f'{tc_values[i]:.3f}'
+
+            for i in range(len(ph_channels)):
+                feeds[f'ph{i+1}'] = f'{ph_values[i]:.3f}'
+            
+            # location = "57.2445673, -4.3978963, 220" #Gorthleck, as an example
 
             #This will automatically limit its rate to not get throttled by AIO
-            mcu.aio_send(feeds, location)
+            mcu.aio_send(feeds, location=None)
 
     def log_sdcard():
         if mcu.sdcard:
-            text = '{} {:.3f} {:.3f} {:.3f} {:.3f}'.format(
-                mcu.get_timestamp(), #timestamp from the RTC
-                probe1.temperature,
-                probe2.temperature,
-                probe3.temperature,
-                probe4.temperature,
-                )
+            text = f'{mcu.get_timestamp()} '
+            text += ' TC:'
+            for tc in range(len(tc_channels)):
+                text+= f' {tc_values[tc]:.3f}'
+            text += ' PH:'
+            for ph in range(len(ph_channels)):
+                text+= f' {ph_values[ph]:.3f}'
+            
             try:
                 with open('/sd/data.txt', 'a') as f:
                     f.write(text)
@@ -156,42 +157,60 @@ def main():
             except OSError as e:
                 print(f'SDCARD FS not writable {e}')
 
-    def update_display():
+    def display_ph():
 
-        display.values[0] = f'{probe1.temperature:4.1f} '
-        display.values[1] = f'{probe2.temperature:4.1f} '
-        display.values[2] = f'{probe3.temperature:4.1f} '
-        display.values[3] = f'{probe4.temperature:4.1f} '
+        # clear display labels/data
+        for i in range(len(display.labels)):
+            display.labels[i]=''
+            display.values[i]=''
 
-        if ph:
-            ph1 = ph.read_PH(ph_adc1.voltage*1000) 
-            ph2 = ph.read_PH(ph_adc2.voltage*1000) 
-            ph3 = ph.read_PH(ph_adc3.voltage*1000) 
+        for ph in ph_channels:
+            i = ph_channels.index(ph)
+            ph_values[i] = ph_converter.read_PH(ph.voltage*1000)
+            display.labels[i] = f'PH{i+1}='
+            display.values[i] = f'{ph_values[i]:4.1f}'
 
-            display.values[4] = f'{ph1: 4.2f} '
-            display.values[5] = f'{ph2: 4.2f} '
-            display.values[6] = f'{ph3: 4.2f} '
-
-        # display.values[7] = f''
         display.show_data_20x4()
 
+    def display_temperature():
 
-    timer_A = 0
-    timer_B = 0
-    timer_C = 0
+        # clear display labels/data
+        for i in range(len(display.labels)):
+            display.labels[i]=''
+            display.values[i]=''
+
+        for tc in tc_channels:
+            i = tc_channels.index(tc)
+            tc_values[i] = tc.temperature
+            display.labels[i] = f'T{i+1}='
+            display.values[i] = f'{tc_values[i]:4.1f}'
+
+        display.show_data_20x4()
+
+    timer_A = time.monotonic()
+    timer_B = time.monotonic()
+    timer_C = time.monotonic()
+    display_page = 1
 
     while True:
         mcu.read_serial()
 
-        if (time.monotonic() - timer_A) >= 0.1:
+        if (time.monotonic() - timer_A) >= 4:
             timer_A = time.monotonic()
+            if display_page == 1:
+                display_page = 2
+            else:
+                display_page = 1
 
         if (time.monotonic() - timer_B) >= 1:
             timer_B = time.monotonic()
             mcu.watchdog.feed()
             mcu.aio_receive()
             parse_feeds()
-            update_display()
+            if display_page == 1:
+                display_temperature()
+            if display_page == 2:
+                display_ph()
 
         if (time.monotonic() - timer_C) >= 30:
             timer_C = time.monotonic()
