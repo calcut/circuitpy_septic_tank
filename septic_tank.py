@@ -20,8 +20,8 @@ __filename__ = "septic_tank.py"
 
 # Set AIO = True to use Wifi and Adafruit IO connection
 # secrets.py file needs to be setup appropriately
-AIO = True
-# AIO = False
+# AIO = True
+AIO = False
 
 PH_CHANNELS = 3
 
@@ -54,6 +54,12 @@ def main():
     # Check what devices are present on the i2c bus
     mcu.i2c_identify(i2c_dict)
 
+    mcu.watchdog.feed()
+    mcu.attach_sdcard()
+    mcu.archive_file('log.txt')
+    mcu.archive_file('data.txt')
+    mcu.watchdog.feed()
+
 
     # Instantiate i2c display
     try:
@@ -78,26 +84,27 @@ def main():
             mcu.log.info(f'No thermocouple channel at {addr:x}')
 
     # Instantiate ph channels
-    ph_channels = []
     try:
-        ph_converter = DFRobot_PH()
+        ph_channels = []
         ads = ADS.ADS1115(mcu.i2c)
-        ph_channels.append(AnalogIn(ads, ADS.P0))
-        ph_channels.append(AnalogIn(ads, ADS.P1))
-        ph_channels.append(AnalogIn(ads, ADS.P2))
-        ph_channels.append(AnalogIn(ads, ADS.P3))
+        adc_list = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]
 
         # Drop any unwanted/unused channels, as specified by PH_CHANNELS
-        ph_channels = ph_channels[:PH_CHANNELS] 
+        adc_list = adc_list[:PH_CHANNELS] 
+
+        for ch in adc_list:
+            ph_channel = DFRobot_PH(
+                analog_in = AnalogIn(ads, ch),
+                calibration_file= f'/sd/ph_calibration_ch{ch+1}.txt',
+                log_handler = mcu.loghandler
+                )
+
+            ph_channels.append(ph_channel)
+
 
     except Exception as e:
+        mcu.log_exception(e)
         mcu.log.info('ADC for pH probes not found')
-
-    mcu.watchdog.feed()
-    mcu.attach_sdcard()
-    mcu.archive_file('log.txt')
-    mcu.archive_file('data.txt')
-    mcu.watchdog.feed()
 
     if AIO:
         mcu.wifi_connect()
@@ -155,7 +162,7 @@ def main():
 
         for ph in ph_channels:
             i = ph_channels.index(ph)
-            mcu.data[f'PH{i+1}'] = ph_converter.read_PH(ph.voltage*1000)
+            mcu.data[f'PH{i+1}'] = ph.read_PH()
             
         for tc in tc_channels:
             i = tc_channels.index(tc)
@@ -173,6 +180,34 @@ def main():
 
         return data
 
+    def interactive_ph_calibration():
+        try:
+            print('Calibration Mode, press Ctrl-C to exit')
+            while True:
+                valid_inputs = []
+                for ch in ph_channels:
+                    index = f'{ph_channels.index(ch)+1}'
+                    valid_inputs.append(index)
+                    ph = ch.read_PH()
+                    print(f'Channel{index} = pH {ph}')
+
+                print(f'Select channel to calibrate {valid_inputs}')
+                line = mcu.get_serial_line(valid_inputs)
+                ch_num = int(line)
+                channel = ph_channels[ch_num-1]
+                print(f'calibrating channel {ch_num}')
+                channel.calibrate()
+
+
+        except KeyboardInterrupt:
+            print('Leaving Calibration Mode')
+
+
+    def usb_serial_parser(string):
+        if string == 'phcal':
+            interactive_ph_calibration()
+
+
 
     timer_A = 0
     timer_B = 0
@@ -180,14 +215,16 @@ def main():
     display_page = 1
 
     while True:
-        mcu.read_serial()
+        mcu.read_serial(send_to=usb_serial_parser)
 
         if (time.monotonic() - timer_A) >= 5:
             timer_A = time.monotonic()
-            if display_page == 1 and len(ph_channels) > 0:
-                display_page = 2
+            if display_page == 1:
+                if len(ph_channels) > 0:
+                    display_page = 2
             else:
-                display_page = 1
+                if len(tc_channels) > 0:
+                    display_page = 1
 
         if (time.monotonic() - timer_B) >= 1:
             timer_B = time.monotonic()
