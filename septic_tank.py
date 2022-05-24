@@ -181,24 +181,36 @@ def main():
         return data
 
     def interactive_ph_calibration():
+
         try:
             print('Calibration Mode, press Ctrl-C to exit')
             while True:
+                # Need to sepcify how to get the temperature from a sensor here
+                temperature = None
                 valid_inputs = []
                 for ch in ph_channels:
                     index = f'{ph_channels.index(ch)+1}'
                     valid_inputs.append(index)
                     ph = ch.read_PH()
-                    print(f'Channel{index} = pH {ph}')
+                    print(f'Channel{index} pH={ph}, voltage={ch.adc.voltage}')
 
                 print(f'Select channel to calibrate {valid_inputs}')
                 line = mcu.get_serial_line(valid_inputs)
                 ch_num = int(line)
                 channel = ph_channels[ch_num-1]
                 print(f'calibrating channel {ch_num}')
-                channel.calibrate()
 
+                if not temperature:
+                    while True:
+                        print(f'Enter the current temperature')
+                        line = mcu.get_serial_line()
+                        try:
+                            temperature = float(line)
+                            break
+                        except Exception as e:
+                            print(e)
 
+                channel.calibrate(temperature)
         except KeyboardInterrupt:
             print('Leaving Calibration Mode')
 
