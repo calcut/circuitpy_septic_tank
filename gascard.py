@@ -25,19 +25,24 @@ class Gascard():
         self.time_constant = None
         self.switches_state = None
 
-        self.restart()
+    def restart(self):
+        self.ready = False
+        self.write_command('X')
+        self.write_command('q')
         while not self.ready:
             self.parse_serial()
-
         self.read_settings()
+
         
     def write_command(self, string):
+
+        # First empty the serial buffer, so we can look for acknowledgement
+        self.empty_serial_buffer()
+
         command_bytes = bytearray(string)
         self.uart.write(command_bytes + bytearray('\r'))
 
         # rough code to check for acknowledgement
-        # This isn't foolproof and can warn even when command has worked
-        # But it does provide a suitable delay
         response = None
         i=0
         while response != command_bytes:
@@ -49,14 +54,22 @@ class Gascard():
                 return
         self.log.debug(f'command {string} acknowledged')
 
-    def restart(self):
-        self.ready = False
-        self.write_command('X')
-        self.write_command('q')
+    def empty_serial_buffer(self):
+        nbytes = self.uart.in_waiting
+        while nbytes > 0:
+            self.uart.read(nbytes)
+            nbytes = self.uart.in_waiting
 
     def read_serial(self):
+
+        # We only care about the latest message, so first empty the serial buffer.
+        # This avoids issues where the buffer has overflowed and gives incomplete messages.
+        self.empty_serial_buffer()
+
+        # Then wait for a new message
         data = self.uart.readline()
-        if data is not None:
+
+        if data:
             data_string = ''.join([chr(b) for b in data])
             if data_string.endswith('\r\n'):
                 data_string = data_string[:-2]  #drop the \r\n from the string       
@@ -75,25 +88,20 @@ class Gascard():
         if not data_string:
             return
 
-        if not self.ready:
-            if data_string[:33] == ' Waiting for application S-Record':
-                self.log.info('Gascard found, starting up... (10s)')
-            if data_string[:33] == ' Application started from address':
-                self.ready = True
-                self.log.info('Gascard ready')
-            return
-
         if data_string[0:2] == 'N ':
             self.mode='Normal'
+            self.ready = True
         elif data_string[0:2] == 'N1':
             self.mode='Normal Channel'
         elif data_string[0:2] == 'X ':
             self.mode='Settings'
         else:
             self.mode = None
+            if self.ready:
+                self.log.debug(f'gc data NOT PARSED {data_string}')
 
         if self.mode == 'Normal':
-            self.log.info('switching to N1 Channel Mode')
+            self.log.info('Switching to N1 Channel Mode')
             self.write_command('N1')
 
         if self.mode == 'Normal Channel':
@@ -115,7 +123,7 @@ class Gascard():
                 self.time_constant = data[5]
                 self.switches_state = data[6]
 
-        self.log.debug(f'{data_string}')
+        self.log.debug(f'{data_string=}')
         return data_string
 
 
@@ -123,7 +131,7 @@ class Gascard():
         self.write_command('X')
         while self.mode != 'Settings':
             self.parse_serial()
-        self.log.info(f'{self.firmware_version=} '
+        self.log.debug(f'{self.firmware_version=} '
                 +f'{self.serial_number=} '
                 +f'{self.config_register=} '
                 +f'{self.frequency=} '
