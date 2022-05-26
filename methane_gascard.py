@@ -61,6 +61,10 @@ def main():
         display.write('Waiting for Gascard')
 
         gc = Gascard(uart)
+        gc.log = logging.getLogger('Gascard')
+        gc.log.addHandler(mcu.loghandler)
+        gc.log.setLevel(logging.INFO)
+        gc.restart()
         mcu.watchdog.feed() #gascard startup can take a while
 
     except Exception as e:
@@ -68,9 +72,7 @@ def main():
         mcu.pixel[0] = mcu.pixel.RED
 
    
-    gc.log = logging.getLogger('Gascard')
-    gc.log.addHandler(mcu.loghandler)
-    gc.log.setLevel(logging.INFO)
+
 
     # Display Gascard Settings
 
