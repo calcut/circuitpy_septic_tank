@@ -29,8 +29,10 @@ class Gascard():
         self.ready = False
         self.write_command('X')
         self.write_command('q')
+        self.log.info('Restarting Gascard')
         while not self.ready:
             self.parse_serial()
+        self.log.info('Gascard Found')
         self.read_settings()
 
         
@@ -40,25 +42,44 @@ class Gascard():
         self.empty_serial_buffer()
 
         command_bytes = bytearray(string)
-        self.uart.write(command_bytes + bytearray('\r'))
 
         # rough code to check for acknowledgement
         response = None
+
+        expected_responses = {
+            # 'N1'   : b'N1',
+            # 'X'    : b'X',
+            'q'    : b' Waiting for application S-Record',
+        }
+
+        if string in expected_responses:
+            expected = expected_responses[string]
+        else:
+            expected = command_bytes
+
+        self.log.debug(f'writing {command_bytes}')
+        self.uart.write(command_bytes + bytearray('\r'))
+        line_start = None
         i=0
-        while response != command_bytes:
-            response = self.uart.read(len(command_bytes))
-            i += 1
-            if i >= 5:
-                if self.ready:
-                    self.log.debug(f'warning, no acknowledgment of command {string}')
+        while line_start != expected:
+            response = self.uart.readline()
+            if response:
+                i+=1
+                line_start = response[:len(expected)]
+            
+            if i >= 20:
+                self.log.debug(f'Command {string} not acknowledged after {i} reads')
                 return
-        self.log.debug(f'command {string} acknowledged')
+
+        self.log.debug(f'Command {string} acknowledged')
 
     def empty_serial_buffer(self):
         nbytes = self.uart.in_waiting
         while nbytes > 0:
             self.uart.read(nbytes)
             nbytes = self.uart.in_waiting
+        # Then perform a readline to make sure we are aligned with a newline
+        self.uart.readline()
 
     def read_serial(self):
 
@@ -69,7 +90,7 @@ class Gascard():
         # Then wait for a new message
         data = self.uart.readline()
 
-        if data:
+        if data is not None:
             data_string = ''.join([chr(b) for b in data])
             if data_string.endswith('\r\n'):
                 data_string = data_string[:-2]  #drop the \r\n from the string       
@@ -88,7 +109,7 @@ class Gascard():
         if not data_string:
             return
 
-        if data_string[0:2] == 'N ':
+        if data_string[0:2] == ('N ' or 'NN'):
             self.mode='Normal'
             self.ready = True
         elif data_string[0:2] == 'N1':
@@ -98,7 +119,10 @@ class Gascard():
         else:
             self.mode = None
             if self.ready:
-                self.log.debug(f'gc data NOT PARSED {data_string}')
+                self.log.warning(f'gc data NOT PARSED [{data_string}]')
+            else:
+                # self.log.warning(f'gc data NOT PARSED [{data_string}] writing Normal Mode')
+                self.write_command('N')
 
         if self.mode == 'Normal':
             self.log.info('Switching to N1 Channel Mode')

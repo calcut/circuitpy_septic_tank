@@ -23,12 +23,15 @@ __filename__ = "septic_tank.py"
 
 # Set AIO = True to use Wifi and Adafruit IO connection
 # secrets.py file needs to be setup appropriately
-# AIO = True
-AIO = False
+AIO = True
+# AIO = False
 
 NUM_PUMPS = 2
 PH_CHANNELS = 3
 DATA_GROUP = 'septic-dev'
+LOGLEVEL = logging.INFO
+
+DELETE_ARCHIVE = True
 
 def main():
 
@@ -52,10 +55,10 @@ def main():
     }
 
     # instantiate the MCU helper class to set up the system
-    mcu = Mcu()
+    mcu = Mcu(watchdog_timeout=20)
 
     # Choose minimum logging level to process
-    mcu.log.setLevel(logging.INFO) #i.e. ignore DEBUG messages
+    mcu.log.setLevel(LOGLEVEL)
 
     # Check what devices are present on the i2c bus
     mcu.i2c_identify(i2c_dict)
@@ -73,6 +76,8 @@ def main():
 
         
     mcu.attach_sdcard()
+    if DELETE_ARCHIVE:
+        mcu.delete_archive()
     mcu.archive_file('log.txt')
     mcu.archive_file('data.txt')
     mcu.watchdog.feed()
@@ -133,22 +138,25 @@ def main():
     def connect_gascard():
         try:
             mcu.watchdog.feed() #gascard startup can take a while
-            uart = busio.UART(board.TX, board.RX, baudrate=57600, receiver_buffer_size=64)
+            uart = busio.UART(board.TX, board.RX, baudrate=57600)
             gc = Gascard(uart)
-            mcu.watchdog.feed() #gascard startup can take a while
             gc.log = logging.getLogger('Gascard')
             gc.log.addHandler(mcu.loghandler)
-            gc.log.setLevel(logging.INFO)
+            gc.log.setLevel(LOGLEVEL)
+            gc.restart()
+            mcu.watchdog.feed() #gascard startup can take a while
 
 
-        except WatchDogTimeout:
-            print('Timed out waiting for Gascard')
-            mcu.log.warning('Gascard not found')
-            gc = None
+        # Probably do not want this, as it effectively ignores some gascard errors
+        # except WatchDogTimeout:
+        #     print('Timed out waiting for Gascard')
+        #     mcu.log.warning('Gascard not found')
+        #     gc = None 
 
         except Exception as e:
             mcu.log_exception(e)
             mcu.log.warning('Gascard not found')
+            raise
 
         return gc
 
@@ -219,15 +227,21 @@ def main():
         if mcu.sdcard:
             text = f'{mcu.get_timestamp()} '
 
-            text += ' TC:'
-            data = filter_data('TC', decimal_places=3)
+            text += ' tc:'
+            data = filter_data('tc', decimal_places=3)
             for key in sorted(data):
                 text+= f' {data[key]:.3f}'
 
-            text += ' PH:'
-            data = filter_data('PH', decimal_places=3)
+            text += ' ph:'
+            data = filter_data('ph', decimal_places=2)
             for key in sorted(data):
-                text+= f' {data[key]:.3f}'
+                text+= f' {data[key]:.2f}'
+
+            text += ' methane:'
+            data = filter_data('methane', decimal_places=4)
+            for key in sorted(data):
+                text+= f' {data[key]:.4f}'
+
             try:
                 with open('/sd/data.txt', 'a') as f:
                     f.write(text+'\n')
