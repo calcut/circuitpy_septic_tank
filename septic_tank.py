@@ -1,11 +1,14 @@
 import time
 from circuitpy_mcu.mcu import Mcu
 from circuitpy_mcu.display import LCD_20x4
+from circuitpy_septic_tank.gascard import Gascard
 from circuitpy_mcu.DFRobot_PH import DFRobot_PH
 import adafruit_mcp9600
 import adafruit_ads1x15.ads1115 as ADS
 from adafruit_ads1x15.analog_in import AnalogIn
 from adafruit_motorkit import MotorKit
+import busio
+import board
 
 # scheduling and event/error handling libs
 from watchdog import WatchDogTimeout
@@ -23,7 +26,9 @@ __filename__ = "septic_tank.py"
 # AIO = True
 AIO = False
 
+NUM_PUMPS = 2
 PH_CHANNELS = 3
+DATA_GROUP = 'septic-dev'
 
 def main():
 
@@ -41,6 +46,7 @@ def main():
         '0x66' : 'Thermocouple Amp MCP9600',
         '0x67' : 'Thermocouple Amp MCP9600',
         '0x68' : 'Realtime Clock PCF8523', # On Adalogger Featherwing
+        '0x70' : 'Motor Featherwing PCA9685', #Solder bridge on address bit A4
         '0x72' : 'Sparkfun LCD Display',
         '0x77' : 'Temp/Humidity/Pressure BME280' # Built into some ESP32S2 feathers 
     }
@@ -54,57 +60,128 @@ def main():
     # Check what devices are present on the i2c bus
     mcu.i2c_identify(i2c_dict)
 
-    mcu.watchdog.feed()
+
+    try:
+        display = LCD_20x4(mcu.i2c)
+        mcu.attach_display(display) # to show wifi/AIO status etc.
+        display.show_text(__filename__) # shows current filename
+        time.sleep(1)
+        mcu.log.info(f'found Display')
+    except Exception as e:
+        mcu.log_exception(e)
+        display = None
+
+        
     mcu.attach_sdcard()
     mcu.archive_file('log.txt')
     mcu.archive_file('data.txt')
     mcu.watchdog.feed()
 
 
-    # Instantiate i2c display
-    try:
-        display = LCD_20x4(mcu.i2c)
-        mcu.attach_display(display) # to show wifi/AIO status etc.
-        display.show_text(__filename__) # shows current filename
-        mcu.log.info(f'found Display')
-    except Exception as e:
-        mcu.log_exception(e)
+    def connect_thermocouple_channels():
+        tc_addresses = [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67]
+        tc_channels = []
 
+        for addr in tc_addresses:
+            try:
+                tc = adafruit_mcp9600.MCP9600(mcu.i2c, address=addr)
+                tc_channels.append(tc)
+                print(f'Found thermocouple channel at address {addr:x}')
+                
+            except Exception as e:
+                mcu.log.info(f'No thermocouple channel at {addr:x}')
 
-    # Instantiate thermocouple probes 
-    tc_addresses = [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67]
-    tc_channels = []
+        return tc_channels
 
-    for addr in tc_addresses:
+    def connect_ph_channels():
         try:
-            tc = adafruit_mcp9600.MCP9600(mcu.i2c, address=addr)
-            tc_channels.append(tc)
-            print(f'Found thermocouple channel at address {addr:x}')
+            ph_channels = []
+            ads = ADS.ADS1115(mcu.i2c)
+            adc_list = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]
+
+            # Drop any unwanted/unused channels, as specified by PH_CHANNELS
+            adc_list = adc_list[:PH_CHANNELS] 
+
+            for ch in adc_list:
+                ph_channel = DFRobot_PH(
+                    analog_in = AnalogIn(ads, ch),
+                    calibration_file= f'/sd/ph_calibration_ch{ch+1}.txt',
+                    log_handler = mcu.loghandler
+                    )
+                ph_channels.append(ph_channel)
+
         except Exception as e:
-            mcu.log.info(f'No thermocouple channel at {addr:x}')
+            mcu.log_exception(e)
+            mcu.log.info('ADC for pH probes not found')
 
-    # Instantiate ph channels
-    try:
-        ph_channels = []
-        ads = ADS.ADS1115(mcu.i2c)
-        adc_list = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]
-
-        # Drop any unwanted/unused channels, as specified by PH_CHANNELS
-        adc_list = adc_list[:PH_CHANNELS] 
-
-        for ch in adc_list:
-            ph_channel = DFRobot_PH(
-                analog_in = AnalogIn(ads, ch),
-                calibration_file= f'/sd/ph_calibration_ch{ch+1}.txt',
-                log_handler = mcu.loghandler
-                )
-
-            ph_channels.append(ph_channel)
+        return ph_channels
 
 
-    except Exception as e:
-        mcu.log_exception(e)
-        mcu.log.info('ADC for pH probes not found')
+    def connect_pumps():
+        try:
+            pump_driver = MotorKit(i2c=mcu.i2c, address=0x70)
+            pumps = [pump_driver.motor1, pump_driver.motor2, pump_driver.motor3, pump_driver.motor4]
+            # Drop any unused pumps as defined by the NUM_PUMPS parameter
+            pumps = pumps[:NUM_PUMPS]
+            
+        except Exception as e:
+            mcu.log_exception(e)
+            mcu.log.warning('Pump driver not found')
+        
+        return pumps
+
+    def connect_gascard():
+        try:
+            mcu.watchdog.feed() #gascard startup can take a while
+            uart = busio.UART(board.TX, board.RX, baudrate=57600, receiver_buffer_size=64)
+            gc = Gascard(uart)
+            mcu.watchdog.feed() #gascard startup can take a while
+            gc.log = logging.getLogger('Gascard')
+            gc.log.addHandler(mcu.loghandler)
+            gc.log.setLevel(logging.INFO)
+
+
+        except WatchDogTimeout:
+            print('Timed out waiting for Gascard')
+            mcu.log.warning('Gascard not found')
+            gc = None
+
+        except Exception as e:
+            mcu.log_exception(e)
+            mcu.log.warning('Gascard not found')
+
+        return gc
+
+    tc_channels = connect_thermocouple_channels()
+    ph_channels = connect_ph_channels()
+    pumps = connect_pumps()
+
+    display.clear()
+    display.write(f'{len(tc_channels)} TC channels')
+    display.set_cursor(0,1)
+    display.write(f'{len(ph_channels)} pH channels')
+    display.set_cursor(0,2)
+    display.write(f'{len(pumps)} air pumps')
+    display.set_cursor(0,3)
+    display.write(f'Waiting for gascard')
+
+    gc = connect_gascard()
+
+    # Display gascard info
+    if gc:
+        display.clear()
+        display.write(f'Gascard FW={gc.firmware_version}')
+        display.set_cursor(0,1)
+        display.write(f'Serial Num={gc.serial_number}')
+        display.set_cursor(0,2)
+        display.write(f'conf={gc.config_register} freq={gc.frequency}')
+        display.set_cursor(0,3)
+        display.write(f'TC={gc.time_constant} SW={gc.switches_state}')
+    else:
+        display.clear()
+        display.write(f'Gascard not found')
+    time.sleep(5)
+
 
     if AIO:
         mcu.wifi_connect()
@@ -130,12 +207,13 @@ def main():
         if mcu.aio_connected and len(mcu.data) > 0:
 
             # Optionally filter e.g. to get <10 feeds
-            data = filter_data('TC', decimal_places=3)
+            # data = filter_data('TC', decimal_places=3)
+            data = mcu.data
 
             # location = "57.2445673, -4.3978963, 220" #Gorthleck, as an example
 
             #This will automatically limit its rate to not get throttled by AIO
-            mcu.aio_send(data, location=None)
+            mcu.aio_send(data, group=DATA_GROUP, location=None)
 
     def log_sdcard():
         if mcu.sdcard:
@@ -158,15 +236,21 @@ def main():
                 print(f'SDCARD FS not writable {e}')
 
     def capture_data():
+
+        # keep keys 'url safe', i.e.
+        # lower case ASCII letters, numbers, dashes only
         mcu.data = {}
 
         for ph in ph_channels:
             i = ph_channels.index(ph)
-            mcu.data[f'PH{i+1}'] = ph.read_PH()
+            mcu.data[f'ph{i+1}'] = ph.read_PH()
             
         for tc in tc_channels:
             i = tc_channels.index(tc)
-            mcu.data[f'TC{i+1}'] = tc.temperature
+            mcu.data[f'tc{i+1}'] = tc.temperature
+
+        if gc:
+            mcu.data['methane1'] = gc.concentration
 
     def filter_data(filter_string=None, decimal_places=1):
 
@@ -214,10 +298,49 @@ def main():
         except KeyboardInterrupt:
             print('Leaving Calibration Mode')
 
+    def display_gascard_reading():
+        display.labels[0]='CH4 Conc='
+        display.labels[1]='Pressure='
+        display.labels[2]='Sample='
+        display.labels[3]='Reference='
+        display.values[0] = f'{gc.concentration:7.4f}%'
+        display.values[1] = f'{gc.pressure:6.1f} '
+        display.values[2] = f'{gc.sample} '
+        display.values[3] = f'{gc.reference} '
+        display.show_data_long()
+
+    def run_pump(index, speed=None, duration=None):
+        
+        pumps[index-1].throttle = speed
+        if duration:
+            mcu.log.info(f'running pump{index} at speed={speed} for {duration}s')
+            time.sleep(duration)
+            pumps[index-1].throttle = 0
+        else:
+            mcu.log.info(f'running pump{index} at speed={speed}')
 
     def usb_serial_parser(string):
         if string == 'phcal':
             interactive_ph_calibration()
+
+        elif string.startswith('p'):
+            settings = string[1:].split()
+            try:
+                index = int(settings[0])
+                speed = float(settings[1])
+                if len(settings) > 2:
+                    duration = int(settings[2])
+                else:
+                    duration = None
+                run_pump(index, speed, duration)
+            except Exception as e:
+                print(e)
+                mcu.log.warning(f'string {string} not valid for pump settings\n'
+                                 +'input pump settings in format "p pump_number speed duration" e.g. p ')
+
+        else:
+            print(f'Writing to Gascard [{string}]')
+            gc.write_command(string)
 
 
 
@@ -228,12 +351,24 @@ def main():
 
     while True:
         mcu.read_serial(send_to=usb_serial_parser)
+        # Check for incoming serial messages from Gascard
+        if gc:
+            data_string = gc.parse_serial()
+            # if gc.mode != 'Normal Channel':
+            #     print(data_string)
 
         if (time.monotonic() - timer_A) >= 5:
             timer_A = time.monotonic()
             if display_page == 1:
                 if len(ph_channels) > 0:
                     display_page = 2
+                elif gc:
+                    display_page = 3
+            elif display_page == 2:
+                if gc:
+                    display_page = 3
+                else:
+                    display_page = 1
             else:
                 if len(tc_channels) > 0:
                     display_page = 1
@@ -245,10 +380,13 @@ def main():
             mcu.aio_receive()
             parse_feeds()
             if display_page == 1:
-                data =  filter_data('TC', decimal_places=1)
+                data =  filter_data('tc', decimal_places=1)
+                display.show_data_20x4(data)
             if display_page == 2:
-                data =  filter_data('PH', decimal_places=1)
-            display.show_data_20x4(data)
+                data =  filter_data('ph', decimal_places=1)
+                display.show_data_20x4(data)
+            if display_page == 3:
+                display_gascard_reading()
 
         if (time.monotonic() - timer_C) >= 30:
             timer_C = time.monotonic()
