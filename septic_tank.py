@@ -373,19 +373,19 @@ def main():
 
         if (time.monotonic() - timer_A) >= 5:
             timer_A = time.monotonic()
-            if display_page == 1:
-                if len(ph_channels) > 0:
-                    display_page = 2
-                elif gc:
-                    display_page = 3
-            elif display_page == 2:
-                if gc:
-                    display_page = 3
-                else:
-                    display_page = 1
-            else:
-                if len(tc_channels) > 0:
-                    display_page = 1
+            # if display_page == 1:
+            #     if len(ph_channels) > 0:
+            #         display_page = 2
+            #     elif gc:
+            #         display_page = 3
+            # elif display_page == 2:
+            #     if gc:
+            #         display_page = 3
+            #     else:
+            #         display_page = 1
+            # else:
+            #     if len(tc_channels) > 0:
+            #         display_page = 1
 
         if (time.monotonic() - timer_B) >= 1:
             timer_B = time.monotonic()
@@ -394,12 +394,15 @@ def main():
             mcu.aio_receive()
             parse_feeds()
             if display_page == 1:
-                data =  filter_data('tc', decimal_places=1)
-                display.show_data_20x4(data)
+                display.set_cursor(0,0)
+                display.write(f'Tank  1    2    3  ') 
+                display.set_cursor(0,1)
+                display.write(f'tc  {mcu.data["tc1"]:3.1f} {00:3.1f} {1:3.1f}')                
+                display.set_cursor(0,2)
+                display.write(f'ph  {mcu.data["ph1"]:3.2f} {mcu.data["ph2"]:3.2f} {mcu.data["ph3"]:3.2f}')
+                display.set_cursor(0,3)
+                display.write(f'CH4 {mcu.data["methane1"]:7.4f}%')
             if display_page == 2:
-                data =  filter_data('ph', decimal_places=1)
-                display.show_data_20x4(data)
-            if display_page == 3:
                 display_gascard_reading()
 
         if (time.monotonic() - timer_C) >= 30:

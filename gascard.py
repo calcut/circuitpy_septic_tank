@@ -155,10 +155,10 @@ class Gascard():
         self.write_command('X')
         while self.mode != 'Settings':
             self.parse_serial()
-        self.log.debug(f'{self.firmware_version=} '
-                +f'{self.serial_number=} '
-                +f'{self.config_register=} '
-                +f'{self.frequency=} '
-                +f'{self.time_constant=} '
-                +f'{self.switches_state=}')
+        self.log.info(f'firmware_version={self.firmware_version} '
+                +f'serial_number={self.serial_number} '
+                +f'config_register={self.config_register} '
+                +f'frequency={self.frequency} '
+                +f'time_constant={self.time_constant} '
+                +f'switches_state={self.switches_state}')
         self.write_command('N1')
