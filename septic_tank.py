@@ -28,7 +28,7 @@ AIO = True
 
 NUM_PUMPS = 2
 PH_CHANNELS = 3
-DATA_GROUP = 'septic-dev'
+AIO_GROUP = 'septic-dev'
 LOGLEVEL = logging.INFO
 
 DELETE_ARCHIVE = True
@@ -193,7 +193,7 @@ def main():
 
     if AIO:
         mcu.wifi_connect()
-        mcu.aio_setup(log_feed=None)
+        mcu.aio_setup(log_feed=None, group=AIO_GROUP)
 
     def parse_feeds():
         if mcu.aio_connected:
@@ -221,7 +221,7 @@ def main():
             # location = "57.2445673, -4.3978963, 220" #Gorthleck, as an example
 
             #This will automatically limit its rate to not get throttled by AIO
-            mcu.aio_send(data, group=DATA_GROUP, location=None)
+            mcu.aio_send(data, group=AIO_GROUP, location=None)
 
     def log_sdcard():
         if mcu.sdcard:
@@ -390,6 +390,16 @@ def main():
         if (time.monotonic() - timer_B) >= 1:
             timer_B = time.monotonic()
             mcu.watchdog.feed()
+
+            if mcu.ota_requested:
+                if mcu.writable_check():
+                    mcu.log.warning('OTA update requested, resetting')
+                    time.sleep(1)
+                    microcontroller.reset()
+                else:
+                    mcu.log.warning('OTA update requested, but CIRCUITPY not writable, skipping')
+                    mcu.ota_requested = False
+                    
             capture_data()
             mcu.aio_receive()
             parse_feeds()
