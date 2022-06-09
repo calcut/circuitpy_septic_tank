@@ -23,8 +23,8 @@ __filename__ = "septic_tank.py"
 
 # Set AIO = True to use Wifi and Adafruit IO connection
 # secrets.py file needs to be setup appropriately
-AIO = True
-# AIO = False
+# AIO = True
+AIO = False
 
 NUM_PUMPS = 2
 PH_CHANNELS = 3
@@ -362,6 +362,7 @@ def main():
     timer_B = 0
     timer_C = 0
     display_page = 1
+    pump_index = 1
 
     while True:
         mcu.read_serial(send_to=usb_serial_parser)
@@ -371,21 +372,19 @@ def main():
             # if gc.mode != 'Normal Channel':
             #     print(data_string)
 
-        if (time.monotonic() - timer_A) >= 5:
+        if (time.monotonic() - timer_A) >= 10:
             timer_A = time.monotonic()
-            # if display_page == 1:
-            #     if len(ph_channels) > 0:
-            #         display_page = 2
-            #     elif gc:
-            #         display_page = 3
-            # elif display_page == 2:
-            #     if gc:
-            #         display_page = 3
-            #     else:
-            #         display_page = 1
-            # else:
-            #     if len(tc_channels) > 0:
-            #         display_page = 1
+
+            # Stop all pumps
+            for p in pumps:
+                p.throttle = 0
+
+            # start the desired pump
+            run_pump(pump_index , 0.7)
+            pump_index += 1
+            if pump_index > NUM_PUMPS:
+                pump_index = 1
+
 
         if (time.monotonic() - timer_B) >= 1:
             timer_B = time.monotonic()
@@ -405,13 +404,13 @@ def main():
             parse_feeds()
             if display_page == 1:
                 display.set_cursor(0,0)
-                display.write(f'Tank  1    2    3  ') 
+                display.write(f'gc1 {mcu.data["methane1"]:7.4f}% {mcu.data["tc4"]:3.1f}C' )
                 display.set_cursor(0,1)
-                display.write(f'tc  {mcu.data["tc1"]:3.1f} {00:3.1f} {1:3.1f}')                
+                display.write(f'Tank  1    2    3  ') 
                 display.set_cursor(0,2)
-                display.write(f'ph  {mcu.data["ph1"]:3.2f} {mcu.data["ph2"]:3.2f} {mcu.data["ph3"]:3.2f}')
+                display.write(f'tc  {mcu.data["tc1"]:3.1f} {mcu.data["tc2"]:3.1f} {mcu.data["tc3"]:3.1f}')                
                 display.set_cursor(0,3)
-                display.write(f'CH4 {mcu.data["methane1"]:7.4f}%')
+                display.write(f'ph  {mcu.data["ph1"]:3.2f} {mcu.data["ph2"]:3.2f} {mcu.data["ph3"]:3.2f}')
             if display_page == 2:
                 display_gascard_reading()
 
