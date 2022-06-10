@@ -26,7 +26,7 @@ __filename__ = "septic_tank.py"
 AIO = True
 # AIO = False
 
-NUM_PUMPS = 2
+NUM_PUMPS = 3
 PH_CHANNELS = 3
 AIO_GROUP = 'septic-dev'
 LOGLEVEL = logging.INFO
@@ -272,7 +272,6 @@ def main():
 
         # keep keys 'url safe', i.e.
         # lower case ASCII letters, numbers, dashes only
-        mcu.data = {}
 
         for ph in ph_channels:
             i = ph_channels.index(ph)
@@ -330,6 +329,33 @@ def main():
                 channel.calibrate(temperature)
         except KeyboardInterrupt:
             print('Leaving Calibration Mode')
+
+    def display_summary():
+        display.set_cursor(0,0)
+        display.write(f'pump{pump_index}={pumps[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C' )
+        display.set_cursor(0,1)
+        line = ''
+        data = filter_data('gc', decimal_places=4)
+        for key in sorted(data):
+            # display as float with max 4 decimal places, and max 7 chars long
+                line += f' {data[key]:.4f}'[:7]
+        line = line[1:] #drop the first space, to keep within 20 chars
+        display.write(line)
+
+        display.set_cursor(0,2)
+        line = 'tc'
+        data = filter_data('tc', decimal_places=1)
+        data.pop('tc4', None) # Remove the ambient temperature thermocouple
+        for key in sorted(data):
+            line+= f' {data[key]:3.1f}'
+        display.write(line)
+
+        display.set_cursor(0,3)
+        line = 'ph'
+        data = filter_data('ph', decimal_places=2)
+        for key in sorted(data):
+            line+= f' {data[key]:3.2f}'
+        display.write(line)
 
     def display_gascard_reading():
         display.labels[0]='CH4 Conc='
@@ -397,7 +423,7 @@ def main():
     timer_A = 0
     timer_B = 0
     timer_C = 0
-    display_page = 1
+    display.clear()    
 
     while True:
         mcu.read_serial(send_to=usb_serial_parser)
@@ -411,31 +437,13 @@ def main():
         if (time.monotonic() - timer_B) >= 1:
             timer_B = time.monotonic()
             mcu.watchdog.feed()
+            mcu.ota_check()
 
-            if mcu.ota_requested:
-                if mcu.writable_check():
-                    mcu.log.warning('OTA update requested, resetting')
-                    time.sleep(1)
-                    microcontroller.reset()
-                else:
-                    mcu.log.warning('OTA update requested, but CIRCUITPY not writable, skipping')
-                    mcu.ota_requested = False
-                    
             capture_data()
             mcu.aio_receive()
             parse_feeds()
-            if display_page == 1:
-                display.set_cursor(0,0)
-                gc_channel = f'gc{pump_index}'
-                display.write(f'{gc_channel} {mcu.data[gc_channel]:7.4f}% {mcu.data["tc4"]:3.1f}C' )
-                display.set_cursor(0,1)
-                display.write(f'Tank  1    2    3  ') 
-                display.set_cursor(0,2)
-                display.write(f'tc  {mcu.data["tc1"]:3.1f} {mcu.data["tc2"]:3.1f} {mcu.data["tc3"]:3.1f}')                
-                display.set_cursor(0,3)
-                display.write(f'ph  {mcu.data["ph1"]:3.2f} {mcu.data["ph2"]:3.2f} {mcu.data["ph3"]:3.2f}')
-            if display_page == 2:
-                display_gascard_reading()
+            display_summary()
+            # display_gascard_reading()
 
         if (time.monotonic() - timer_C) >= 30:
             timer_C = time.monotonic()
