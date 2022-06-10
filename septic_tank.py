@@ -23,8 +23,8 @@ __filename__ = "septic_tank.py"
 
 # Set AIO = True to use Wifi and Adafruit IO connection
 # secrets.py file needs to be setup appropriately
-# AIO = True
-AIO = False
+AIO = True
+# AIO = False
 
 NUM_PUMPS = 2
 PH_CHANNELS = 3
@@ -33,7 +33,14 @@ LOGLEVEL = logging.INFO
 
 DELETE_ARCHIVE = True
 
+# global variable so pumps can be shut down after keyboard interrupt
+pumps = []
+pump_index = 1
+
 def main():
+
+    # defaults, will be overwritten if connected to AIO
+    pump_speeds = [0.8, 0.8, 0.8]
 
     # Optional list of expected I2C devices and addresses
     # Maybe useful for automatic configuration in future
@@ -124,8 +131,10 @@ def main():
 
     def connect_pumps():
         try:
+            global pumps
             pump_driver = MotorKit(i2c=mcu.i2c, address=0x70)
             pumps = [pump_driver.motor1, pump_driver.motor2, pump_driver.motor3, pump_driver.motor4]
+
             # Drop any unused pumps as defined by the NUM_PUMPS parameter
             pumps = pumps[:NUM_PUMPS]
             
@@ -194,6 +203,9 @@ def main():
     if AIO:
         mcu.wifi_connect()
         mcu.aio_setup(log_feed=None, group=AIO_GROUP)
+        mcu.subscribe(f'{AIO_GROUP}.pump1-speed')
+        mcu.subscribe(f'{AIO_GROUP}.pump2-speed')
+        mcu.subscribe(f'{AIO_GROUP}.pump3-speed')
 
     def parse_feeds():
         if mcu.aio_connected:
@@ -206,9 +218,12 @@ def main():
                     b = int(payload[5:], 16)
                     display.set_fast_backlight_rgb(r, g, b)
 
-                if feed_id == 'target-temperature':
-                    temp_target = float(payload)
-                    # Nothing is done with this currently
+                if feed_id == f'{AIO_GROUP}.pump1-speed':
+                    pump_speeds[0] = float(payload)
+                if feed_id == f'{AIO_GROUP}.pump2-speed':
+                    pump_speeds[1] = float(payload)
+                if feed_id == f'{AIO_GROUP}.pump3-speed':
+                    pump_speeds[2] = float(payload)
 
     def publish_feeds():
         # AIO limits to 30 data points per minute and 10 feeds in the free version
@@ -237,11 +252,15 @@ def main():
             for key in sorted(data):
                 text+= f' {data[key]:.2f}'
 
-            text += ' methane:'
-            data = filter_data('methane', decimal_places=4)
-            for key in sorted(data):
-                text+= f' {data[key]:.4f}'
-
+            text += f' gc:'
+            for p in pumps:
+                channel = f'gc{pumps.index(p) + 1}'
+                data = filter_data(f'{channel}', decimal_places=4)
+                if data:
+                    text+= f' {data[channel]:.4f}'
+                else:
+                    text+= ' --'
+                    
             try:
                 with open('/sd/data.txt', 'a') as f:
                     f.write(text+'\n')
@@ -264,7 +283,7 @@ def main():
             mcu.data[f'tc{i+1}'] = tc.temperature
 
         if gc:
-            mcu.data['methane1'] = gc.concentration
+            mcu.data[f'gc{pump_index}'] = gc.concentration
 
     def filter_data(filter_string=None, decimal_places=1):
 
@@ -324,7 +343,7 @@ def main():
         display.show_data_long()
 
     def run_pump(index, speed=None, duration=None):
-        
+
         pumps[index-1].throttle = speed
         if duration:
             mcu.log.info(f'running pump{index} at speed={speed} for {duration}s')
@@ -332,6 +351,23 @@ def main():
             pumps[index-1].throttle = 0
         else:
             mcu.log.info(f'running pump{index} at speed={speed}')
+
+    def rotate_pumps():
+
+        global pump_index
+        pump_index += 1
+        if pump_index > NUM_PUMPS:
+            pump_index = 1
+
+        # Stop all pumps
+        for p in pumps:
+            p.throttle = 0
+
+        # # start the desired pump
+        speed = pump_speeds[pump_index - 1]
+        pumps[pump_index-1].throttle = speed
+        mcu.log.info(f'running pump{pump_index} at speed={speed}')
+
 
     def usb_serial_parser(string):
         if string == 'phcal':
@@ -362,7 +398,6 @@ def main():
     timer_B = 0
     timer_C = 0
     display_page = 1
-    pump_index = 1
 
     while True:
         mcu.read_serial(send_to=usb_serial_parser)
@@ -371,19 +406,6 @@ def main():
             data_string = gc.parse_serial()
             # if gc.mode != 'Normal Channel':
             #     print(data_string)
-
-        if (time.monotonic() - timer_A) >= 10:
-            timer_A = time.monotonic()
-
-            # Stop all pumps
-            for p in pumps:
-                p.throttle = 0
-
-            # start the desired pump
-            run_pump(pump_index , 0.7)
-            pump_index += 1
-            if pump_index > NUM_PUMPS:
-                pump_index = 1
 
 
         if (time.monotonic() - timer_B) >= 1:
@@ -404,7 +426,8 @@ def main():
             parse_feeds()
             if display_page == 1:
                 display.set_cursor(0,0)
-                display.write(f'gc1 {mcu.data["methane1"]:7.4f}% {mcu.data["tc4"]:3.1f}C' )
+                gc_channel = f'gc{pump_index}'
+                display.write(f'{gc_channel} {mcu.data[gc_channel]:7.4f}% {mcu.data["tc4"]:3.1f}C' )
                 display.set_cursor(0,1)
                 display.write(f'Tank  1    2    3  ') 
                 display.set_cursor(0,2)
@@ -418,12 +441,16 @@ def main():
             timer_C = time.monotonic()
             publish_feeds()
             log_sdcard()
+            rotate_pumps()
+
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
         print('Code Stopped by Keyboard Interrupt')
+        for p in pumps:
+            p.throttle = 0
         # May want to add code to stop gracefully here 
         # e.g. turn off relays or pumps
         
