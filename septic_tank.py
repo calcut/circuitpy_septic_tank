@@ -332,7 +332,9 @@ def main():
 
     def display_summary():
         display.set_cursor(0,0)
-        display.write(f'pump{pump_index}={pumps[pump_index-1].throttle:3.2f}  {mcu.data["tc4"]:3.1f}C' )
+        line = f'pump{pump_index}={pumps[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C         '[:20]
+        display.write(line)
+
         display.set_cursor(0,1)
         line = ''
         data = filter_data('gc', decimal_places=4)
