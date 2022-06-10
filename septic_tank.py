@@ -31,7 +31,7 @@ PH_CHANNELS = 3
 AIO_GROUP = 'septic-dev'
 LOGLEVEL = logging.INFO
 
-DELETE_ARCHIVE = True
+DELETE_ARCHIVE = False
 
 # global variable so pumps can be shut down after keyboard interrupt
 pumps = []
