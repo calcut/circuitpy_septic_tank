@@ -30,6 +30,7 @@ NUM_PUMPS = 3
 PH_CHANNELS = 3
 AIO_GROUP = 'septic-dev'
 LOGLEVEL = logging.INFO
+# LOGLEVEL = logging.DEBUG
 
 DELETE_ARCHIVE = False
 
@@ -71,12 +72,16 @@ def main():
     mcu.i2c_identify(i2c_dict)
 
 
+    mcu.print('level 0 log test')
+    mcu.log.info('level INFO log test')
+
+
     try:
         display = LCD_20x4(mcu.i2c)
         mcu.attach_display(display) # to show wifi/AIO status etc.
         display.show_text(__filename__) # shows current filename
         time.sleep(1)
-        mcu.log.info(f'found Display')
+        mcu.print(f'found Display')
     except Exception as e:
         mcu.log_exception(e)
         display = None
@@ -98,10 +103,10 @@ def main():
             try:
                 tc = adafruit_mcp9600.MCP9600(mcu.i2c, address=addr)
                 tc_channels.append(tc)
-                mcu.log.info(f'Found thermocouple channel at address {addr:x}')
+                mcu.print(f'Found thermocouple channel at address {addr:x}')
                 
             except Exception as e:
-                mcu.log.info(f'No thermocouple channel at {addr:x}')
+                mcu.print(f'No thermocouple channel at {addr:x}')
 
         return tc_channels
 
@@ -124,7 +129,7 @@ def main():
 
         except Exception as e:
             mcu.log_exception(e)
-            mcu.log.info('ADC for pH probes not found')
+            mcu.print('ADC for pH probes not found')
 
         return ph_channels
 
@@ -149,7 +154,6 @@ def main():
             mcu.watchdog.feed() #gascard startup can take a while
             uart = busio.UART(board.TX, board.RX, baudrate=57600)
             gc = Gascard(uart)
-            gc.log = logging.getLogger('Gascard')
             gc.log.addHandler(mcu.loghandler)
             gc.log.setLevel(LOGLEVEL)
             gc.restart()
@@ -202,7 +206,7 @@ def main():
 
     if AIO:
         mcu.wifi_connect()
-        mcu.aio_setup(log_feed=None, group=AIO_GROUP)
+        mcu.aio_setup(log_feed='log', group=AIO_GROUP)
         mcu.subscribe(f'{AIO_GROUP}.pump1-speed')
         mcu.subscribe(f'{AIO_GROUP}.pump2-speed')
         mcu.subscribe(f'{AIO_GROUP}.pump3-speed')
@@ -417,7 +421,7 @@ def main():
                                  +'input pump settings in format "p pump_number speed duration" e.g. p ')
 
         else:
-            mcu.log.info(f'Writing to Gascard [{string}]')
+            mcu.print(f'Writing to Gascard [{string}]')
             gc.write_command(string)
 
 
