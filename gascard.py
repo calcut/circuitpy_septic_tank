@@ -6,7 +6,7 @@ class Gascard():
 
         # No handler is provided here, add one after instanciation, if logging is needed
         self.log = logging.getLogger('Gascard')
-        
+
         self.uart = uart
         self.ready = False
         self.timer = time.monotonic()
@@ -76,10 +76,12 @@ class Gascard():
     def empty_serial_buffer(self):
         nbytes = self.uart.in_waiting
         while nbytes > 0:
-            self.uart.read(nbytes)
+            scrap1 = self.uart.read(nbytes)
+            # print(f'{scrap1=}')
             nbytes = self.uart.in_waiting
         # Then perform a readline to make sure we are aligned with a newline
-        self.uart.readline()
+        scrap = self.uart.readline()
+        # self.log.debug(f'{scrap=}')
 
     def read_serial(self):
 
@@ -89,6 +91,7 @@ class Gascard():
 
         # Then wait for a new message
         data = self.uart.readline()
+        # self.log.debug(f'{data=}')
 
         if data is not None:
             data_string = ''.join([chr(b) for b in data])
@@ -121,7 +124,9 @@ class Gascard():
             if self.ready:
                 self.log.warning(f'gc data NOT PARSED [{data_string}]')
             else:
-                # self.log.warning(f'gc data NOT PARSED [{data_string}] writing Normal Mode')
+                self.log.debug('possible startup issue detected, trying to select Normal Mode')
+                self.log.debug(f'{data_string=}')
+                time.sleep(1) 
                 self.write_command('N')
 
         if self.mode == 'Normal':
