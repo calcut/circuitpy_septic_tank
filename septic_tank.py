@@ -31,7 +31,7 @@ PH_CHANNELS = 3
 AIO_GROUP = 'septic-dev'
 LOGLEVEL = logging.INFO
 
-DELETE_ARCHIVE = True
+DELETE_ARCHIVE = False
 
 # global variable so pumps can be shut down after keyboard interrupt
 pumps = []
@@ -98,7 +98,7 @@ def main():
             try:
                 tc = adafruit_mcp9600.MCP9600(mcu.i2c, address=addr)
                 tc_channels.append(tc)
-                print(f'Found thermocouple channel at address {addr:x}')
+                mcu.log.info(f'Found thermocouple channel at address {addr:x}')
                 
             except Exception as e:
                 mcu.log.info(f'No thermocouple channel at {addr:x}')
@@ -266,7 +266,7 @@ def main():
                     f.write(text+'\n')
                     mcu.log.info(f'{text} -> /sd/data.txt')
             except OSError as e:
-                print(f'SDCARD FS not writable {e}')
+                mcu.log.warning(f'SDCARD FS not writable {e}')
 
     def capture_data():
 
@@ -417,7 +417,7 @@ def main():
                                  +'input pump settings in format "p pump_number speed duration" e.g. p ')
 
         else:
-            print(f'Writing to Gascard [{string}]')
+            mcu.log.info(f'Writing to Gascard [{string}]')
             gc.write_command(string)
 
 
