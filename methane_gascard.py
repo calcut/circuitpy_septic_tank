@@ -39,7 +39,7 @@ def main():
     uart = busio.UART(board.TX, board.RX, baudrate=57600)
 
     # instantiate the MCU helper class to set up the system
-    mcu = Mcu()
+    mcu = Mcu(watchdog_timeout=20)
 
     # Check what devices are present on the i2c bus
     mcu.i2c_identify(i2c_dict)
@@ -61,9 +61,8 @@ def main():
         display.write('Waiting for Gascard')
 
         gc = Gascard(uart)
-        gc.log = logging.getLogger('Gascard')
         gc.log.addHandler(mcu.loghandler)
-        gc.log.setLevel(logging.INFO)
+        gc.log.setLevel(logging.DEBUG)
         gc.restart()
         mcu.watchdog.feed() #gascard startup can take a while
 

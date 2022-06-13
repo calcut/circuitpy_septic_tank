@@ -4,9 +4,9 @@ import time
 class Gascard():
     def __init__(self, uart):
 
-        # Change this to a real logger after instanciation, if logging is needed
-        self.log = logging.NullLogger()
-
+        # No handler is provided here, add one after instanciation, if logging is needed
+        self.log = logging.getLogger('Gascard')
+        
         self.uart = uart
         self.ready = False
         self.timer = time.monotonic()
