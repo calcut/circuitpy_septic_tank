@@ -26,6 +26,8 @@ __filename__ = "septic_tank.py"
 AIO = True
 # AIO = False
 
+GASCARD = True
+# GASCARD = False
 NUM_PUMPS = 3
 PH_CHANNELS = 3
 AIO_GROUP = 'septic-dev'
@@ -33,6 +35,7 @@ LOGLEVEL = logging.INFO
 # LOGLEVEL = logging.DEBUG
 
 DELETE_ARCHIVE = False
+# DELETE_ARCHIVE = True
 
 # global variable so pumps can be shut down after keyboard interrupt
 pumps = []
@@ -64,6 +67,8 @@ def main():
 
     # instantiate the MCU helper class to set up the system
     mcu = Mcu(watchdog_timeout=20)
+    mcu.booting = True # A flag to record boot messages
+    mcu.log.info(f'STARTING {__filename__} {__version__}')
 
     # Choose minimum logging level to process
     mcu.log.setLevel(LOGLEVEL)
@@ -71,17 +76,12 @@ def main():
     # Check what devices are present on the i2c bus
     mcu.i2c_identify(i2c_dict)
 
-
-    mcu.print('level 0 log test')
-    mcu.log.info('level INFO log test')
-
-
     try:
         display = LCD_20x4(mcu.i2c)
         mcu.attach_display(display) # to show wifi/AIO status etc.
         display.show_text(__filename__) # shows current filename
         time.sleep(1)
-        mcu.print(f'found Display')
+        mcu.log.info(f'found Display')
     except Exception as e:
         mcu.log_exception(e)
         display = None
@@ -103,10 +103,10 @@ def main():
             try:
                 tc = adafruit_mcp9600.MCP9600(mcu.i2c, address=addr)
                 tc_channels.append(tc)
-                mcu.print(f'Found thermocouple channel at address {addr:x}')
+                mcu.log.info(f'Found thermocouple channel at address {addr:x}')
                 
             except Exception as e:
-                mcu.print(f'No thermocouple channel at {addr:x}')
+                mcu.log.info(f'No thermocouple channel at {addr:x}')
 
         return tc_channels
 
@@ -129,7 +129,7 @@ def main():
 
         except Exception as e:
             mcu.log_exception(e)
-            mcu.print('ADC for pH probes not found')
+            mcu.log.info('ADC for pH probes not found')
 
         return ph_channels
 
@@ -151,11 +151,11 @@ def main():
 
     def connect_gascard():
         try:
-            mcu.watchdog.feed() #gascard startup can take a while
             uart = busio.UART(board.TX, board.RX, baudrate=57600)
             gc = Gascard(uart)
             gc.log.addHandler(mcu.loghandler)
             gc.log.setLevel(LOGLEVEL)
+            mcu.watchdog.feed() #gascard startup can take a while
             gc.restart()
             mcu.watchdog.feed() #gascard startup can take a while
 
@@ -186,7 +186,10 @@ def main():
     display.set_cursor(0,3)
     display.write(f'Waiting for gascard')
 
-    gc = connect_gascard()
+    if GASCARD:
+        gc = connect_gascard()
+    else:
+        gc = None
 
     # Display gascard info
     if gc:
@@ -240,7 +243,7 @@ def main():
             # location = "57.2445673, -4.3978963, 220" #Gorthleck, as an example
 
             #This will automatically limit its rate to not get throttled by AIO
-            mcu.aio_send(data, group=AIO_GROUP, location=None)
+            mcu.aio_send(data, location=None)
 
     def log_sdcard():
         if mcu.sdcard:
@@ -257,13 +260,14 @@ def main():
                 text+= f' {data[key]:.2f}'
 
             text += f' gc:'
-            for p in pumps:
-                channel = f'gc{pumps.index(p) + 1}'
-                data = filter_data(f'{channel}', decimal_places=4)
-                if data:
-                    text+= f' {data[channel]:.4f}'
-                else:
-                    text+= ' --'
+            if gc:
+                for p in pumps:
+                    channel = f'gc{pumps.index(p) + 1}'
+                    data = filter_data(f'{channel}', decimal_places=4)
+                    if data:
+                        text+= f' {data[channel]:.4f}'
+                    else:
+                        text+= ' --'
                     
             try:
                 with open('/sd/data.txt', 'a') as f:
@@ -421,15 +425,17 @@ def main():
                                  +'input pump settings in format "p pump_number speed duration" e.g. p ')
 
         else:
-            mcu.print(f'Writing to Gascard [{string}]')
-            gc.write_command(string)
-
-
+            if gc:
+                mcu.log.info(f'Writing to Gascard [{string}]')
+                gc.write_command(string)
 
     timer_A = 0
     timer_B = 0
     timer_C = 0
-    display.clear()    
+    display.clear()
+    mcu.log.info(f'BOOT complete at {mcu.get_timestamp()}')
+    mcu.booting = False # Stop accumulating boot log messages
+    mcu.aio_send_log() # Send the boot log
 
     while True:
         mcu.read_serial(send_to=usb_serial_parser)
