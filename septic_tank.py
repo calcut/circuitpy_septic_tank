@@ -32,7 +32,7 @@ GASCARD = True
 # GASCARD = False
 NUM_PUMPS = 1
 PH_CHANNELS = 1
-AIO_GROUP = 'septic-dev'
+AIO_GROUP = 'boness'
 LOGLEVEL = logging.INFO
 # LOGLEVEL = logging.DEBUG
 
@@ -248,7 +248,8 @@ def main():
             mcu.aio_send(data, location=None)
 
             # don't keep transmitting this until next updated.
-            del mcu.data['gc1'] # Simplified for one channel
+            if 'gc1' in mcu.data:
+                del mcu.data['gc1'] # Simplified for one channel
 
     def log_sdcard():
         if mcu.sdcard:
@@ -356,7 +357,7 @@ def main():
         #         line += f' {data[key]:.4f}'[:7]
         # line = line[1:] #drop the first space, to keep within 20 chars
 
-        line += f'CH4  {gc.concentration:.4f}'[:8] # Simplified for just a single channel
+        line = f'CH4  {gc.concentration:.4f}%' # Simplified for just a single channel
         display.write(line)
 
         display.set_cursor(0,2)
@@ -489,7 +490,7 @@ def main():
             timer_C = time.monotonic()
             publish_feeds()
             log_sdcard()
-            rotate_pumps()
+            # rotate_pumps()
 
 
 if __name__ == "__main__":
