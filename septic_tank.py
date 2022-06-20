@@ -26,7 +26,7 @@ __filename__ = "septic_tank.py"
 AIO = True
 # AIO = False
 
-GASCARD_INTERVAL = 5 # minutes
+GASCARD_INTERVAL = 10 # minutes
 GASCARD_SAMPLE_DURATION = 2 # minutes
 GASCARD = True
 # GASCARD = False
@@ -437,7 +437,7 @@ def main():
                 mcu.log.info(f'Writing to Gascard [{string}]')
                 gc.write_command(string)
 
-    timer_A = 0
+    timer_A = GASCARD_INTERVAL*60
     timer_A1 = 0
     timer_B = 0
     timer_C = 0
@@ -454,7 +454,7 @@ def main():
             # if gc.mode != 'Normal Channel':
             #     print(data_string)
 
-        if (time.monotonic() - timer_A) >= GASCARD_INTERVAL*60: #5 minutes
+        if (time.monotonic() - timer_A) >= GASCARD_INTERVAL*60:
             mcu.log.info(f'starting pump after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
             # rotate_pumps()
             speed = pump_speeds[0]
