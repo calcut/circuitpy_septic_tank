@@ -26,10 +26,10 @@ __filename__ = "septic_tank.py"
 AIO = True
 # AIO = False
 
-GASCARD = True
-# GASCARD = False
-NUM_PUMPS = 3
-PH_CHANNELS = 3
+# GASCARD = True
+GASCARD = False
+NUM_PUMPS = 1
+PH_CHANNELS = 1
 AIO_GROUP = 'septic-dev'
 LOGLEVEL = logging.INFO
 # LOGLEVEL = logging.DEBUG
@@ -339,18 +339,19 @@ def main():
             print('Leaving Calibration Mode')
 
     def display_summary():
-        display.set_cursor(0,0)
-        line = f'pump{pump_index}={pumps[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C         '[:20]
-        display.write(line)
+        if gc:
+            display.set_cursor(0,0)
+            line = f'pump{pump_index}={pumps[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C         '[:20]
+            display.write(line)
 
-        display.set_cursor(0,1)
-        line = ''
-        data = filter_data('gc', decimal_places=4)
-        for key in sorted(data):
-            # display as float with max 4 decimal places, and max 7 chars long
-                line += f' {data[key]:.4f}'[:7]
-        line = line[1:] #drop the first space, to keep within 20 chars
-        display.write(line)
+            display.set_cursor(0,1)
+            line = ''
+            data = filter_data('gc', decimal_places=4)
+            for key in sorted(data):
+                # display as float with max 4 decimal places, and max 7 chars long
+                    line += f' {data[key]:.4f}'[:7]
+            line = line[1:] #drop the first space, to keep within 20 chars
+            display.write(line)
 
         display.set_cursor(0,2)
         line = 'tc'
@@ -461,7 +462,8 @@ def main():
             timer_C = time.monotonic()
             publish_feeds()
             log_sdcard()
-            rotate_pumps()
+            if gc:
+                rotate_pumps()
 
 
 if __name__ == "__main__":
