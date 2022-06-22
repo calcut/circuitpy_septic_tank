@@ -140,7 +140,11 @@ class Gascard():
                 if len(data) == 7:
                     self.sample = int(data[1])
                     self.reference = int(data[2])
-                    self.concentration = float(data[4])
+                    try:
+                        self.concentration = float(data[4])
+                    except ValueError:
+                        self.log.debug(f'Gascard error {data_string=}')
+                        self.concentration = -100.0
                     self.temperature = int(data[5])
                     self.pressure = float(data[6])
 
