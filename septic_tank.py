@@ -28,8 +28,8 @@ AIO = True
 
 GASCARD_INTERVAL = 10 # minutes
 GASCARD_SAMPLE_DURATION = 2 # minutes
-# GASCARD = True
-GASCARD = False
+GASCARD = True
+# GASCARD = False
 NUM_PUMPS = 1
 PH_CHANNELS = 1
 AIO_GROUP = 'boness'
@@ -46,7 +46,7 @@ pump_index = 1
 def main():
 
     # defaults, will be overwritten if connected to AIO
-    pump_speeds = [0.8, 0.8, 0.8]
+    pump_speeds = [0.5, 0.5, 0.5]
 
     # Optional list of expected I2C devices and addresses
     # Maybe useful for automatic configuration in future
@@ -205,7 +205,7 @@ def main():
         display.write(f'TC={gc.time_constant} SW={gc.switches_state}')
     else:
         display.clear()
-        display.write(f'Gascard not found')
+        display.write(f'Gascard not used')
     time.sleep(5)
 
 
@@ -438,7 +438,7 @@ def main():
                 mcu.log.info(f'Writing to Gascard [{string}]')
                 gc.write_command(string)
 
-    timer_A = GASCARD_INTERVAL*60
+    timer_A = -GASCARD_INTERVAL*60
     timer_A1 = 0
     timer_B = 0
     timer_C = 0
