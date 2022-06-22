@@ -28,8 +28,8 @@ AIO = True
 
 GASCARD_INTERVAL = 5 # minutes
 GASCARD_SAMPLE_DURATION = 2 # minutes
-GASCARD = True
-# GASCARD = False
+# GASCARD = True
+GASCARD = False
 NUM_PUMPS = 1
 PH_CHANNELS = 1
 AIO_GROUP = 'boness'
@@ -68,7 +68,7 @@ def main():
     }
 
     # instantiate the MCU helper class to set up the system
-    mcu = Mcu(watchdog_timeout=20)
+    mcu = Mcu(watchdog_timeout=40)
     mcu.booting = True # A flag to record boot messages
     mcu.log.info(f'STARTING {__filename__} {__version__}')
 
@@ -345,20 +345,21 @@ def main():
             print('Leaving Calibration Mode')
 
     def display_summary():
-        display.set_cursor(0,0)
-        line = f'pump{pump_index}={pumps[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C         '[:20]
-        display.write(line)
+        if gc:
+            display.set_cursor(0,0)
+            line = f'pump{pump_index}={pumps[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C         '[:20]
+            display.write(line)
 
-        display.set_cursor(0,1)
-        # line = ''
-        # data = filter_data('gc', decimal_places=4)
-        # for key in sorted(data):
-        #     # display as float with max 4 decimal places, and max 7 chars long
-        #         line += f' {data[key]:.4f}'[:7]
-        # line = line[1:] #drop the first space, to keep within 20 chars
+            display.set_cursor(0,1)
+            # line = ''
+            # data = filter_data('gc', decimal_places=4)
+            # for key in sorted(data):
+            #     # display as float with max 4 decimal places, and max 7 chars long
+            #         line += f' {data[key]:.4f}'[:7]
+            # line = line[1:] #drop the first space, to keep within 20 chars
 
-        line = f'CH4  {gc.concentration:.4f}%' # Simplified for just a single channel
-        display.write(line)
+            line = f'CH4  {gc.concentration:.4f}%' # Simplified for just a single channel
+            display.write(line)
 
         display.set_cursor(0,2)
         line = 'tc'
@@ -454,26 +455,26 @@ def main():
             # if gc.mode != 'Normal Channel':
             #     print(data_string)
 
-        if (time.monotonic() - timer_A) >= GASCARD_INTERVAL*60: #5 minutes
-            mcu.log.info(f'starting pump after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
-            # rotate_pumps()
-            speed = pump_speeds[0]
-            pumps[0].throttle = speed
-            mcu.log.info(f'running pump 1 at speed={speed}')
+            if (time.monotonic() - timer_A) >= GASCARD_INTERVAL*60: #5 minutes
+                mcu.log.info(f'starting pump after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
+                # rotate_pumps()
+                speed = pump_speeds[0]
+                pumps[0].throttle = speed
+                mcu.log.info(f'running pump 1 at speed={speed}')
 
-            timer_A = time.monotonic()
-            timer_A1 = time.monotonic()
+                timer_A = time.monotonic()
+                timer_A1 = time.monotonic()
 
-        if time.monotonic() - timer_A1 > GASCARD_SAMPLE_DURATION*60: #2 minutes
-            if gc:
-                mcu.data[f'gc1'] = gc.concentration
-            
-            mcu.log.info(f'capturing sample and disabling pump after GASCARD_SAMPLE_DURATION = {GASCARD_SAMPLE_DURATION}')
-            # Push timerA1 out into the future so this won't trigger again until after the next sample
-            timer_A1 = timer_A + GASCARD_INTERVAL*60 *2
-            print(f'{time.monotonic()=}')
-            print(f'{timer_A1=}')
-            pumps[0].throttle = 0
+            if time.monotonic() - timer_A1 > GASCARD_SAMPLE_DURATION*60: #2 minutes
+                if gc:
+                    mcu.data[f'gc1'] = gc.concentration
+                
+                mcu.log.info(f'capturing sample and disabling pump after GASCARD_SAMPLE_DURATION = {GASCARD_SAMPLE_DURATION}')
+                # Push timerA1 out into the future so this won't trigger again until after the next sample
+                timer_A1 = timer_A + GASCARD_INTERVAL*60 *2
+                print(f'{time.monotonic()=}')
+                print(f'{timer_A1=}')
+                pumps[0].throttle = 0
 
         if (time.monotonic() - timer_B) >= 1:
             timer_B = time.monotonic()
