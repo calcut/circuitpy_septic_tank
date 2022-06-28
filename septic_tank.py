@@ -210,14 +210,14 @@ def main():
     if AIO:
         mcu.wifi_connect()
         mcu.aio_setup(log_feed='log', group=AIO_GROUP)
-        mcu.subscribe(f'{AIO_GROUP}.pump1-speed')
-        mcu.subscribe(f'{AIO_GROUP}.pump2-speed')
-        mcu.subscribe(f'{AIO_GROUP}.pump3-speed')
+        mcu.subscribe('pump1-speed')
+        mcu.subscribe('pump2-speed')
+        mcu.subscribe('pump3-speed')
 
     def parse_feeds():
         if mcu.aio_connected:
-            for feed_id in mcu.feeds.keys():
-                payload = mcu.feeds.pop(feed_id)
+            for feed_id in mcu.updated_feeds.keys():
+                payload = mcu.updated_feeds.pop(feed_id)
 
                 if feed_id == 'led-color':
                     r = int(payload[1:3], 16)
@@ -225,11 +225,11 @@ def main():
                     b = int(payload[5:], 16)
                     display.set_fast_backlight_rgb(r, g, b)
 
-                if feed_id == f'{AIO_GROUP}.pump1-speed':
+                if feed_id == f'pump1-speed':
                     pump_speeds[0] = float(payload)
-                if feed_id == f'{AIO_GROUP}.pump2-speed':
+                if feed_id == f'pump2-speed':
                     pump_speeds[1] = float(payload)
-                if feed_id == f'{AIO_GROUP}.pump3-speed':
+                if feed_id == f'pump3-speed':
                     pump_speeds[2] = float(payload)
 
     def publish_feeds():
@@ -342,7 +342,7 @@ def main():
         if gc:
             display.set_cursor(0,0)
             line = f'pump{pump_index}={pumps[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C         '[:20]
-            display.write(line)
+            display.write(line[:20])
 
             display.set_cursor(0,1)
             line = ''
@@ -351,7 +351,7 @@ def main():
                 # display as float with max 4 decimal places, and max 7 chars long
                     line += f' {data[key]:.4f}'[:7]
             line = line[1:] #drop the first space, to keep within 20 chars
-            display.write(line)
+            display.write(line[:20])
 
         display.set_cursor(0,2)
         line = 'tc'
@@ -359,14 +359,14 @@ def main():
         data.pop('tc4', None) # Remove the ambient temperature thermocouple
         for key in sorted(data):
             line+= f' {data[key]:3.1f}'
-        display.write(line)
+        display.write(line[:20])
 
         display.set_cursor(0,3)
         line = 'ph'
         data = filter_data('ph', decimal_places=2)
         for key in sorted(data):
             line+= f' {data[key]:3.2f}'
-        display.write(line)
+        display.write(line[:20])
 
     def display_gascard_reading():
         display.labels[0]='CH4 Conc='
