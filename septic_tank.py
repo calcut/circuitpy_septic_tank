@@ -44,7 +44,7 @@ pump_index = 1
 def main():
 
     # defaults, will be overwritten if connected to AIO
-    pump_speeds = [0.8, 0.8, 0.8]
+    pump_speeds = [0.5, 0.5, 0.5]
 
     # Optional list of expected I2C devices and addresses
     # Maybe useful for automatic configuration in future
@@ -66,7 +66,7 @@ def main():
     }
 
     # instantiate the MCU helper class to set up the system
-    mcu = Mcu(watchdog_timeout=20)
+    mcu = Mcu(watchdog_timeout=40)
     mcu.booting = True # A flag to record boot messages
     mcu.log.info(f'STARTING {__filename__} {__version__}')
 
@@ -203,7 +203,7 @@ def main():
         display.write(f'TC={gc.time_constant} SW={gc.switches_state}')
     else:
         display.clear()
-        display.write(f'Gascard not found')
+        display.write(f'Gascard not used')
     time.sleep(5)
 
 
@@ -244,6 +244,10 @@ def main():
 
             #This will automatically limit its rate to not get throttled by AIO
             mcu.aio_send(data, location=None)
+
+            # don't keep transmitting this until next updated.
+            if 'gc1' in mcu.data:
+                del mcu.data['gc1'] # Simplified for one channel
 
     def log_sdcard():
         if mcu.sdcard:
@@ -289,8 +293,8 @@ def main():
             i = tc_channels.index(tc)
             mcu.data[f'tc{i+1}'] = tc.temperature
 
-        if gc:
-            mcu.data[f'gc{pump_index}'] = gc.concentration
+        # if gc:
+        #     mcu.data[f'gc{pump_index}'] = gc.concentration
 
     def filter_data(filter_string=None, decimal_places=1):
 
@@ -342,6 +346,7 @@ def main():
         if gc:
             display.set_cursor(0,0)
             line = f'pump{pump_index}={pumps[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C         '[:20]
+
             display.write(line[:20])
 
             display.set_cursor(0,1)
@@ -352,6 +357,7 @@ def main():
                     line += f' {data[key]:.4f}'[:7]
             line = line[1:] #drop the first space, to keep within 20 chars
             display.write(line[:20])
+
 
         display.set_cursor(0,2)
         line = 'tc'
@@ -389,21 +395,21 @@ def main():
         else:
             mcu.log.info(f'running pump{index} at speed={speed}')
 
-    def rotate_pumps():
+    # def rotate_pumps():
 
-        global pump_index
-        pump_index += 1
-        if pump_index > NUM_PUMPS:
-            pump_index = 1
+    #     global pump_index
+    #     pump_index += 1
+    #     if pump_index > NUM_PUMPS:
+    #         pump_index = 1
 
-        # Stop all pumps
-        for p in pumps:
-            p.throttle = 0
+    #     # Stop all pumps
+    #     for p in pumps:
+    #         p.throttle = 0
 
-        # # start the desired pump
-        speed = pump_speeds[pump_index - 1]
-        pumps[pump_index-1].throttle = speed
-        mcu.log.info(f'running pump{pump_index} at speed={speed}')
+    #     # start the desired pump
+    #     speed = pump_speeds[pump_index - 1]
+    #     pumps[pump_index-1].throttle = speed
+    #     mcu.log.info(f'running pump{pump_index} at speed={speed}')
 
 
     def usb_serial_parser(string):
@@ -430,7 +436,8 @@ def main():
                 mcu.log.info(f'Writing to Gascard [{string}]')
                 gc.write_command(string)
 
-    timer_A = 0
+    timer_A = -GASCARD_INTERVAL*60
+    timer_A1 = 0
     timer_B = 0
     timer_C = 0
     display.clear()
@@ -446,6 +453,26 @@ def main():
             # if gc.mode != 'Normal Channel':
             #     print(data_string)
 
+            if (time.monotonic() - timer_A) >= GASCARD_INTERVAL*60: #5 minutes
+                mcu.log.info(f'starting pump after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
+                # rotate_pumps()
+                speed = pump_speeds[0]
+                pumps[0].throttle = speed
+                mcu.log.info(f'running pump 1 at speed={speed}')
+
+                timer_A = time.monotonic()
+                timer_A1 = time.monotonic()
+
+            if time.monotonic() - timer_A1 > GASCARD_SAMPLE_DURATION*60: #2 minutes
+                if gc:
+                    mcu.data[f'gc1'] = gc.concentration
+                
+                mcu.log.info(f'capturing sample and disabling pump after GASCARD_SAMPLE_DURATION = {GASCARD_SAMPLE_DURATION}')
+                # Push timerA1 out into the future so this won't trigger again until after the next sample
+                timer_A1 = timer_A + GASCARD_INTERVAL*60 *2
+                print(f'{time.monotonic()=}')
+                print(f'{timer_A1=}')
+                pumps[0].throttle = 0
 
         if (time.monotonic() - timer_B) >= 1:
             timer_B = time.monotonic()
@@ -464,6 +491,7 @@ def main():
             log_sdcard()
             if gc:
                 rotate_pumps()
+
 
 
 if __name__ == "__main__":

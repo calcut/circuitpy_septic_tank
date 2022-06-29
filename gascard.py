@@ -108,51 +108,61 @@ class Gascard():
 
     def parse_serial(self):
         data_string = self.read_serial()
+        try:
+            self.log.debug(f'{data_string=}')
 
-        if not data_string:
-            return
+            if not data_string:
+                return
 
-        if data_string[0:2] == ('N ' or 'NN'):
-            self.mode='Normal'
-            self.ready = True
-        elif data_string[0:2] == 'N1':
-            self.mode='Normal Channel'
-        elif data_string[0:2] == 'X ':
-            self.mode='Settings'
-        else:
-            self.mode = None
-            if self.ready:
-                self.log.warning(f'gc data NOT PARSED [{data_string}]')
+            if data_string[0:2] == ('N ' or 'NN'):
+                self.mode='Normal'
+                self.ready = True
+            elif data_string[0:2] == 'N1':
+                self.mode='Normal Channel'
+            elif data_string[0:2] == 'X ':
+                self.mode='Settings'
             else:
-                self.log.debug('possible startup issue detected, trying to select Normal Mode')
-                self.log.debug(f'{data_string=}')
-                time.sleep(1) 
-                self.write_command('N')
+                self.mode = None
+                if self.ready:
+                    self.log.warning(f'gc data NOT PARSED [{data_string}]')
+                else:
+                    self.log.debug('possible startup issue detected, trying to select Normal Mode')
+                    self.log.debug(f'{data_string=}')
+                    time.sleep(1) 
+                    self.write_command('N')
 
-        if self.mode == 'Normal':
-            self.log.info('Switching to N1 Channel Mode')
-            self.write_command('N1')
+            if self.mode == 'Normal':
+                self.log.info('Switching to N1 Channel Mode')
+                self.write_command('N1')
 
-        if self.mode == 'Normal Channel':
-            data = data_string.split(' ')
-            if len(data) == 7:
-                self.sample = int(data[1])
-                self.reference = int(data[2])
-                self.concentration = float(data[4])
-                self.temperature = int(data[5])
-                self.pressure = float(data[6])
+            if self.mode == 'Normal Channel':
+                data = data_string.split(' ')
+                if len(data) == 7:
+                    self.sample = int(data[1])
+                    self.reference = int(data[2])
+                    try:
+                        self.concentration = float(data[4])
+                    except ValueError:
+                        self.log.debug(f'Gascard error {data_string=}')
+                        self.concentration = -100.0
+                    self.temperature = int(data[5])
+                    self.pressure = float(data[6])
 
-        if self.mode == 'Settings':
-            data = data_string.split(' ')
-            if len(data) == 7:
-                self.firmware_version = data[1]
-                self.serial_number = data[2]
-                self.config_register = data[3]
-                self.frequency = data[4]
-                self.time_constant = data[5]
-                self.switches_state = data[6]
+            if self.mode == 'Settings':
+                data = data_string.split(' ')
+                if len(data) == 7:
+                    self.firmware_version = data[1]
+                    self.serial_number = data[2]
+                    self.config_register = data[3]
+                    self.frequency = data[4]
+                    self.time_constant = data[5]
+                    self.switches_state = data[6]
+            
+        except Exception as e:
+            self.log.warning(str(e))
+            self.log.warning(f'{data_string=}')
+            raise
 
-        self.log.debug(f'{data_string=}')
         return data_string
 
 
