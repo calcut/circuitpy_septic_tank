@@ -213,8 +213,8 @@ def main():
         mcu.wifi_connect()
         mcu.aio_setup(log_feed='log', group=AIO_GROUP)
         mcu.subscribe('pump1-speed')
-        mcu.subscribe('pump2-speed')
-        mcu.subscribe('pump3-speed')
+#         mcu.subscribe('pump2-speed')
+#         mcu.subscribe('pump3-speed')
 
     def parse_feeds():
         if mcu.aio_connected:
