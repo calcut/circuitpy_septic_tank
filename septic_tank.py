@@ -17,7 +17,7 @@ import microcontroller
 import adafruit_logging as logging
 import traceback
 
-__version__ = "0.0.0-auto.0"
+__version__ = "1.0.1_http"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
 __filename__ = "septic_tank.py"
 
@@ -32,7 +32,7 @@ GASCARD_INTERVAL = 10 # minutes
 GASCARD = False
 NUM_PUMPS = 1
 PH_CHANNELS = 1
-AIO_GROUP = 'septic-dev'
+AIO_GROUP = 'boness'
 LOGLEVEL = logging.INFO
 # LOGLEVEL = logging.DEBUG
 
