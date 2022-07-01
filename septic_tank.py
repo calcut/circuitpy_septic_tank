@@ -68,7 +68,7 @@ def main():
     }
 
     # instantiate the MCU helper class to set up the system
-    mcu = Mcu(watchdog_timeout=40)
+    mcu = Mcu(watchdog_timeout=240)
     mcu.booting = True # A flag to record boot messages
     mcu.log.info(f'STARTING {__filename__} {__version__}')
 
