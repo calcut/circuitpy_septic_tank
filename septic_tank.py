@@ -28,16 +28,16 @@ AIO = True
 
 GASCARD_SAMPLE_DURATION = 2 # minutes
 GASCARD_INTERVAL = 10 # minutes
-GASCARD = True
-# GASCARD = False
+# GASCARD = True
+GASCARD = False
 NUM_PUMPS = 1
 PH_CHANNELS = 1
 AIO_GROUP = 'boness'
 LOGLEVEL = logging.INFO
 # LOGLEVEL = logging.DEBUG
 
-DELETE_ARCHIVE = False
-# DELETE_ARCHIVE = True
+# DELETE_ARCHIVE = False
+DELETE_ARCHIVE = True
 
 # global variable so pumps can be shut down after keyboard interrupt
 pumps = []
