@@ -234,6 +234,9 @@ def main():
                 if feed_id == f'pump3-speed':
                     pump_speeds[2] = float(payload)
 
+                if feed_id == 'ota':
+                    mcu.ota_reboot()
+
     def publish_feeds():
         # AIO limits to 30 data points per minute and 10 feeds in the free version
         if mcu.aio_connected and len(mcu.data) > 0:
@@ -481,7 +484,6 @@ def main():
         if (time.monotonic() - timer_B) >= 1:
             timer_B = time.monotonic()
             mcu.watchdog.feed()
-            mcu.ota_check()
 
             capture_data()
             mcu.aio_receive()
