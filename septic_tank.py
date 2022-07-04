@@ -28,9 +28,9 @@ AIO = True
 
 GASCARD_SAMPLE_DURATION = 2 # minutes
 GASCARD_INTERVAL = 10 # minutes
-# GASCARD = True
-GASCARD = False
-NUM_PUMPS = 1
+GASCARD = True
+# GASCARD = False
+NUM_PUMPS = 2
 PH_CHANNELS = 1
 AIO_GROUP = 'boness'
 LOGLEVEL = logging.INFO
@@ -455,26 +455,28 @@ def main():
             # if gc.mode != 'Normal Channel':
             #     print(data_string)
 
-            if (time.monotonic() - timer_A) >= GASCARD_INTERVAL*60: #5 minutes
-                mcu.log.info(f'starting pump after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
-                # rotate_pumps()
-                speed = pump_speeds[0]
-                pumps[0].throttle = speed
-                mcu.log.info(f'running pump 1 at speed={speed}')
+        if (time.monotonic() - timer_A) >= GASCARD_INTERVAL*60:
+            mcu.log.info(f'starting pump after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
+            # rotate_pumps()
+            speed = pump_speeds[0]
+            pumps[0].throttle = speed
+            pumps[1].throttle = speed
+            mcu.log.info(f'running pump 1 and 2 at speed={speed}')
 
-                timer_A = time.monotonic()
-                timer_A1 = time.monotonic()
+            timer_A = time.monotonic()
+            timer_A1 = time.monotonic()
 
-            if time.monotonic() - timer_A1 > GASCARD_SAMPLE_DURATION*60: #2 minutes
-                if gc:
-                    mcu.data[f'gc1'] = gc.concentration
-                
-                mcu.log.info(f'capturing sample and disabling pump after GASCARD_SAMPLE_DURATION = {GASCARD_SAMPLE_DURATION}')
-                # Push timerA1 out into the future so this won't trigger again until after the next sample
-                timer_A1 = timer_A + GASCARD_INTERVAL*60 *2
-                print(f'{time.monotonic()=}')
-                print(f'{timer_A1=}')
-                pumps[0].throttle = 0
+        if time.monotonic() - timer_A1 > GASCARD_SAMPLE_DURATION*60:
+            if gc:
+                mcu.data[f'gc1'] = gc.concentration
+                mcu.log.info(f'Capturing gascard sample')
+
+            mcu.log.info(f'disabling pump after GASCARD_SAMPLE_DURATION = {GASCARD_SAMPLE_DURATION}')
+            # Push timerA1 out into the future so this won't trigger again until after the next sample
+            timer_A1 = timer_A + GASCARD_INTERVAL*60 *2
+            pumps[0].throttle = 0
+            pumps[1].throttle = 0
+
 
         if (time.monotonic() - timer_B) >= 1:
             timer_B = time.monotonic()
@@ -492,7 +494,8 @@ def main():
             publish_feeds()
             log_sdcard()
             if gc:
-                rotate_pumps()
+                pass
+                # rotate_pumps()
 
 
 
