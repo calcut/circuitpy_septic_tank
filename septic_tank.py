@@ -1,6 +1,7 @@
 import time
 from circuitpy_mcu.mcu import Mcu
 from circuitpy_mcu.display import LCD_20x4
+from circuitpy_mcu.aio import Aio_http
 from circuitpy_septic_tank.gascard import Gascard
 from circuitpy_mcu.DFRobot_PH import DFRobot_PH
 import adafruit_mcp9600
@@ -26,13 +27,13 @@ __filename__ = "septic_tank.py"
 AIO = True
 # AIO = False
 
-GASCARD_SAMPLE_DURATION = 2 # minutes
-GASCARD_INTERVAL = 10 # minutes
-GASCARD = True
-# GASCARD = False
+GASCARD_PUMP_TIME = 120 #2 minutes
+GASCARD_INTERVAL = 600 #10 minutes
+# GASCARD = True
+GASCARD = False
 NUM_PUMPS = 2
 PH_CHANNELS = 1
-AIO_GROUP = 'boness'
+AIO_GROUP = 'boness-x'
 LOGLEVEL = logging.INFO
 # LOGLEVEL = logging.DEBUG
 
@@ -41,12 +42,12 @@ DELETE_ARCHIVE = True
 
 # global variable so pumps can be shut down after keyboard interrupt
 pumps = []
-pump_index = 1
 
 def main():
 
     # defaults, will be overwritten if connected to AIO
     pump_speeds = [0.5, 0.5, 0.5]
+    pump_index = 1
 
     # Optional list of expected I2C devices and addresses
     # Maybe useful for automatic configuration in future
@@ -66,6 +67,11 @@ def main():
         '0x72' : 'Sparkfun LCD Display',
         '0x77' : 'Temp/Humidity/Pressure BME280' # Built into some ESP32S2 feathers 
     }
+
+    timer_gascard_interval = -GASCARD_INTERVAL
+    timer_pump = 0
+    timer_capture = 0
+    timer_sd = 0
 
     # instantiate the MCU helper class to set up the system
     mcu = Mcu(watchdog_timeout=240)
@@ -139,7 +145,7 @@ def main():
     def connect_pumps():
         try:
             global pumps
-            pump_driver = MotorKit(i2c=mcu.i2c, address=0x70)
+            pump_driver = MotorKit(i2c=mcu.i2c, address=78)
             pumps = [pump_driver.motor1, pump_driver.motor2, pump_driver.motor3, pump_driver.motor4]
 
             # Drop any unused pumps as defined by the NUM_PUMPS parameter
@@ -211,15 +217,16 @@ def main():
 
     if AIO:
         mcu.wifi_connect()
-        mcu.aio_setup(log_feed='log', group=AIO_GROUP)
-        mcu.subscribe('pump1-speed')
-#         mcu.subscribe('pump2-speed')
-#         mcu.subscribe('pump3-speed')
+        group = f'{AIO_GROUP}-{mcu.id}'
+        aio = Aio_http(mcu.requests, group, mcu.loghandler)
+        aio.log.setLevel(LOGLEVEL)
+        mcu.loghandler.aio = aio
+        aio.subscribe('pump1-speed')
 
     def parse_feeds():
-        if mcu.aio_connected:
-            for feed_id in mcu.updated_feeds.keys():
-                payload = mcu.updated_feeds.pop(feed_id)
+        if AIO:
+            for feed_id in aio.updated_feeds.keys():
+                payload = aio.updated_feeds.pop(feed_id)
 
                 if feed_id == 'led-color':
                     r = int(payload[1:3], 16)
@@ -237,9 +244,9 @@ def main():
                 if feed_id == 'ota':
                     mcu.ota_reboot()
 
-    def publish_feeds():
+    def publish_feeds(interval):
         # AIO limits to 30 data points per minute and 10 feeds in the free version
-        if mcu.aio_connected and len(mcu.data) > 0:
+        if AIO and len(mcu.data) > 0:
 
             # Optionally filter e.g. to get <10 feeds
             # data = filter_data('TC', decimal_places=3)
@@ -248,58 +255,93 @@ def main():
             # location = "57.2445673, -4.3978963, 220" #Gorthleck, as an example
 
             #This will automatically limit its rate to not get throttled by AIO
-            mcu.aio_send(data, location=None)
+            aio.publish_feeds(data, interval=interval, location=None)
 
             # don't keep transmitting this until next updated.
             if 'gc1' in mcu.data:
                 del mcu.data['gc1'] # Simplified for one channel
 
-    def log_sdcard():
+    def log_sdcard(interval=30):
+        nonlocal timer_sd
         if mcu.sdcard:
-            text = f'{mcu.get_timestamp()} '
+            if time.monotonic() - timer_sd >= interval:
+                timer_sd = time.monotonic()
 
-            text += ' tc:'
-            data = filter_data('tc', decimal_places=3)
-            for key in sorted(data):
-                text+= f' {data[key]:.3f}'
+                text = f'{mcu.get_timestamp()} '
+                text += ' tc:'
+                data = filter_data('tc', decimal_places=3)
+                for key in sorted(data):
+                    text+= f' {data[key]:.3f}'
 
-            text += ' ph:'
-            data = filter_data('ph', decimal_places=2)
-            for key in sorted(data):
-                text+= f' {data[key]:.2f}'
+                text += ' ph:'
+                data = filter_data('ph', decimal_places=2)
+                for key in sorted(data):
+                    text+= f' {data[key]:.2f}'
 
-            text += f' gc:'
-            if gc:
-                for p in pumps:
-                    channel = f'gc{pumps.index(p) + 1}'
-                    data = filter_data(f'{channel}', decimal_places=4)
-                    if data:
-                        text+= f' {data[channel]:.4f}'
-                    else:
-                        text+= ' --'
-                    
-            try:
-                with open('/sd/data.txt', 'a') as f:
-                    f.write(text+'\n')
-                    mcu.log.info(f'{text} -> /sd/data.txt')
-            except OSError as e:
-                mcu.log.warning(f'SDCARD FS not writable {e}')
+                text += f' gc:'
+                if gc:
+                    for p in pumps:
+                        channel = f'gc{pumps.index(p) + 1}'
+                        data = filter_data(f'{channel}', decimal_places=4)
+                        if data:
+                            text+= f' {data[channel]:.4f}'
+                        else:
+                            text+= ' --'
+                        
+                try:
+                    with open('/sd/data.txt', 'a') as f:
+                        f.write(text+'\n')
+                        mcu.log.info(f'{text} -> /sd/data.txt')
+                except OSError as e:
+                    mcu.log.warning(f'SDCARD FS not writable {e}')
 
-    def capture_data():
 
-        # keep keys 'url safe', i.e.
-        # lower case ASCII letters, numbers, dashes only
 
-        for ph in ph_channels:
-            i = ph_channels.index(ph)
-            mcu.data[f'ph{i+1}'] = ph.read_PH()
-            
-        for tc in tc_channels:
-            i = tc_channels.index(tc)
-            mcu.data[f'tc{i+1}'] = tc.temperature
+    def capture_data(interval=1):
+        nonlocal timer_capture
+        nonlocal timer_gascard_interval
+        nonlocal timer_pump
+        nonlocal pump_index
 
-        # if gc:
-        #     mcu.data[f'gc{pump_index}'] = gc.concentration
+        if (time.monotonic() - timer_capture) >= interval:
+            timer_capture = time.monotonic()
+        
+            # keep keys 'url safe', i.e.
+            # lower case ASCII letters, numbers, dashes only
+
+            for ph in ph_channels:
+                i = ph_channels.index(ph)
+                mcu.data[f'ph{i+1}'] = ph.read_PH()
+                
+            for tc in tc_channels:
+                i = tc_channels.index(tc)
+                mcu.data[f'tc{i+1}'] = tc.temperature
+
+        if gc:
+            if (time.monotonic() - timer_gascard_interval) >= GASCARD_INTERVAL:
+                timer_gascard_interval = time.monotonic()
+                timer_pump = time.monotonic()
+
+                mcu.log.info(f'starting pump after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
+                speed = pump_speeds[pump_index-1]
+                pumps[pump_index-1].throttle = speed
+                mcu.log.info(f'running pump {pump_index} at speed={speed}')
+
+
+            if time.monotonic() - timer_pump > GASCARD_PUMP_TIME:
+                mcu.data[f'gc{pump_index}'] = gc.concentration
+                mcu.log.info(f'Capturing gascard sample')
+                mcu.log.info(f'disabling pump after GASCARD_PUMP_TIME = {GASCARD_PUMP_TIME}')
+                # Push timer_pump out into the future so this won't trigger again until after the next sample
+                timer_pump = timer_gascard_interval + GASCARD_INTERVAL*2
+                pumps[pump_index-1].throttle = 0
+
+                pump_index += 1
+                if pump_index > NUM_PUMPS:
+                    pump_index = 1
+
+            display_summary()
+
 
     def filter_data(filter_string=None, decimal_places=1):
 
@@ -441,64 +483,32 @@ def main():
                 mcu.log.info(f'Writing to Gascard [{string}]')
                 gc.write_command(string)
 
-    timer_A = -GASCARD_INTERVAL*60
-    timer_A1 = 0
-    timer_B = 0
-    timer_C = 0
+
     display.clear()
     mcu.log.info(f'BOOT complete at {mcu.get_timestamp()}')
     mcu.booting = False # Stop accumulating boot log messages
-    mcu.aio_send_log() # Send the boot log
+    aio.publish_long('log', mcu.logdata) # Send the boot log
 
     while True:
+        mcu.watchdog.feed()
         mcu.read_serial(send_to=usb_serial_parser)
+
+        capture_data(interval=1)
+        publish_feeds(interval=30)
+        log_sdcard(interval=30)
+        if aio.receive(interval=10) > 0:
+            parse_feeds()
+
         # Check for incoming serial messages from Gascard
         if gc:
             data_string = gc.parse_serial()
             # if gc.mode != 'Normal Channel':
             #     print(data_string)
 
-        if (time.monotonic() - timer_A) >= GASCARD_INTERVAL*60:
-            mcu.log.info(f'starting pump after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
-            # rotate_pumps()
-            speed = pump_speeds[0]
-            pumps[0].throttle = speed
-            pumps[1].throttle = speed
-            mcu.log.info(f'running pump 1 and 2 at speed={speed}')
-
-            timer_A = time.monotonic()
-            timer_A1 = time.monotonic()
-
-        if time.monotonic() - timer_A1 > GASCARD_SAMPLE_DURATION*60:
-            if gc:
-                mcu.data[f'gc1'] = gc.concentration
-                mcu.log.info(f'Capturing gascard sample')
-
-            mcu.log.info(f'disabling pump after GASCARD_SAMPLE_DURATION = {GASCARD_SAMPLE_DURATION}')
-            # Push timerA1 out into the future so this won't trigger again until after the next sample
-            timer_A1 = timer_A + GASCARD_INTERVAL*60 *2
-            pumps[0].throttle = 0
-            pumps[1].throttle = 0
 
 
-        if (time.monotonic() - timer_B) >= 1:
-            timer_B = time.monotonic()
-            mcu.watchdog.feed()
-
-            capture_data()
-            mcu.aio_receive()
-            parse_feeds()
-            display_summary()
-            # display_gascard_reading()
-
-        if (time.monotonic() - timer_C) >= 30:
-            timer_C = time.monotonic()
-            publish_feeds()
-            log_sdcard()
-            if gc:
-                pass
-                # rotate_pumps()
-
+       
+            
 
 
 if __name__ == "__main__":
