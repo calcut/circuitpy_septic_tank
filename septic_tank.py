@@ -17,7 +17,7 @@ import microcontroller
 import adafruit_logging as logging
 import traceback
 
-__version__ = "0.0.0-auto.0"
+__version__ = "1.0.1_http"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
 __filename__ = "septic_tank.py"
 
@@ -26,16 +26,18 @@ __filename__ = "septic_tank.py"
 AIO = True
 # AIO = False
 
-# GASCARD = True
-GASCARD = False
-NUM_PUMPS = 1
+GASCARD_SAMPLE_DURATION = 2 # minutes
+GASCARD_INTERVAL = 10 # minutes
+GASCARD = True
+# GASCARD = False
+NUM_PUMPS = 2
 PH_CHANNELS = 1
-AIO_GROUP = 'septic-dev'
+AIO_GROUP = 'boness'
 LOGLEVEL = logging.INFO
 # LOGLEVEL = logging.DEBUG
 
-DELETE_ARCHIVE = False
-# DELETE_ARCHIVE = True
+# DELETE_ARCHIVE = False
+DELETE_ARCHIVE = True
 
 # global variable so pumps can be shut down after keyboard interrupt
 pumps = []
@@ -66,7 +68,7 @@ def main():
     }
 
     # instantiate the MCU helper class to set up the system
-    mcu = Mcu(watchdog_timeout=40)
+    mcu = Mcu(watchdog_timeout=240)
     mcu.booting = True # A flag to record boot messages
     mcu.log.info(f'STARTING {__filename__} {__version__}')
 
@@ -211,8 +213,8 @@ def main():
         mcu.wifi_connect()
         mcu.aio_setup(log_feed='log', group=AIO_GROUP)
         mcu.subscribe('pump1-speed')
-        mcu.subscribe('pump2-speed')
-        mcu.subscribe('pump3-speed')
+#         mcu.subscribe('pump2-speed')
+#         mcu.subscribe('pump3-speed')
 
     def parse_feeds():
         if mcu.aio_connected:
@@ -231,6 +233,9 @@ def main():
                     pump_speeds[1] = float(payload)
                 if feed_id == f'pump3-speed':
                     pump_speeds[2] = float(payload)
+
+                if feed_id == 'ota':
+                    mcu.ota_reboot()
 
     def publish_feeds():
         # AIO limits to 30 data points per minute and 10 feeds in the free version
@@ -453,31 +458,32 @@ def main():
             # if gc.mode != 'Normal Channel':
             #     print(data_string)
 
-            if (time.monotonic() - timer_A) >= GASCARD_INTERVAL*60: #5 minutes
-                mcu.log.info(f'starting pump after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
-                # rotate_pumps()
-                speed = pump_speeds[0]
-                pumps[0].throttle = speed
-                mcu.log.info(f'running pump 1 at speed={speed}')
+        if (time.monotonic() - timer_A) >= GASCARD_INTERVAL*60:
+            mcu.log.info(f'starting pump after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
+            # rotate_pumps()
+            speed = pump_speeds[0]
+            pumps[0].throttle = speed
+            pumps[1].throttle = speed
+            mcu.log.info(f'running pump 1 and 2 at speed={speed}')
 
-                timer_A = time.monotonic()
-                timer_A1 = time.monotonic()
+            timer_A = time.monotonic()
+            timer_A1 = time.monotonic()
 
-            if time.monotonic() - timer_A1 > GASCARD_SAMPLE_DURATION*60: #2 minutes
-                if gc:
-                    mcu.data[f'gc1'] = gc.concentration
-                
-                mcu.log.info(f'capturing sample and disabling pump after GASCARD_SAMPLE_DURATION = {GASCARD_SAMPLE_DURATION}')
-                # Push timerA1 out into the future so this won't trigger again until after the next sample
-                timer_A1 = timer_A + GASCARD_INTERVAL*60 *2
-                print(f'{time.monotonic()=}')
-                print(f'{timer_A1=}')
-                pumps[0].throttle = 0
+        if time.monotonic() - timer_A1 > GASCARD_SAMPLE_DURATION*60:
+            if gc:
+                mcu.data[f'gc1'] = gc.concentration
+                mcu.log.info(f'Capturing gascard sample')
+
+            mcu.log.info(f'disabling pump after GASCARD_SAMPLE_DURATION = {GASCARD_SAMPLE_DURATION}')
+            # Push timerA1 out into the future so this won't trigger again until after the next sample
+            timer_A1 = timer_A + GASCARD_INTERVAL*60 *2
+            pumps[0].throttle = 0
+            pumps[1].throttle = 0
+
 
         if (time.monotonic() - timer_B) >= 1:
             timer_B = time.monotonic()
             mcu.watchdog.feed()
-            mcu.ota_check()
 
             capture_data()
             mcu.aio_receive()
@@ -490,7 +496,8 @@ def main():
             publish_feeds()
             log_sdcard()
             if gc:
-                rotate_pumps()
+                pass
+                # rotate_pumps()
 
 
 
