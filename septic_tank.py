@@ -29,7 +29,7 @@ GASCARD_INTERVAL = 600 #10 minutes
 GASCARD = False
 NUM_PUMPS = 2
 PH_CHANNELS = 1
-AIO_GROUP = 'boness-x'
+AIO_GROUP = 'boness'
 LOGLEVEL = logging.INFO
 # LOGLEVEL = logging.DEBUG
 
