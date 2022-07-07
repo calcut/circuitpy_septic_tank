@@ -12,11 +12,7 @@ import busio
 import board
 
 # scheduling and event/error handling libs
-from watchdog import WatchDogTimeout
-import supervisor
-import microcontroller
 import adafruit_logging as logging
-import traceback
 
 __version__ = "1.0.1_http"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
@@ -74,7 +70,7 @@ def main():
     timer_sd = 0
 
     # instantiate the MCU helper class to set up the system
-    mcu = Mcu(watchdog_timeout=240)
+    mcu = Mcu()
     mcu.booting = True # A flag to record boot messages
     mcu.log.info(f'STARTING {__filename__} {__version__}')
 
@@ -100,7 +96,15 @@ def main():
         mcu.delete_archive()
     mcu.archive_file('log.txt')
     mcu.archive_file('data.txt')
-    mcu.watchdog.feed()
+    mcu.watchdog_feed()
+
+    if AIO:
+        mcu.wifi_connect()
+        group = f'{AIO_GROUP}-{mcu.id}'
+        aio = Aio_http(mcu.requests, group, mcu.loghandler)
+        aio.log.setLevel(LOGLEVEL)
+        mcu.loghandler.aio = aio
+        aio.subscribe('pump1-speed')
 
 
     def connect_thermocouple_channels():
@@ -163,9 +167,9 @@ def main():
             gc = Gascard(uart)
             gc.log.addHandler(mcu.loghandler)
             gc.log.setLevel(LOGLEVEL)
-            mcu.watchdog.feed() #gascard startup can take a while
+            mcu.watchdog_feed() #gascard startup can take a while
             gc.restart()
-            mcu.watchdog.feed() #gascard startup can take a while
+            mcu.watchdog_feed() #gascard startup can take a while
 
 
         # Probably do not want this, as it effectively ignores some gascard errors
@@ -214,14 +218,6 @@ def main():
         display.write(f'Gascard not used')
     time.sleep(5)
 
-
-    if AIO:
-        mcu.wifi_connect()
-        group = f'{AIO_GROUP}-{mcu.id}'
-        aio = Aio_http(mcu.requests, group, mcu.loghandler)
-        aio.log.setLevel(LOGLEVEL)
-        mcu.loghandler.aio = aio
-        aio.subscribe('pump1-speed')
 
     def parse_feeds():
         if AIO:
@@ -490,7 +486,7 @@ def main():
     aio.publish_long('log', mcu.logdata) # Send the boot log
 
     while True:
-        mcu.watchdog.feed()
+        mcu.watchdog_feed()
         mcu.read_serial(send_to=usb_serial_parser)
 
         capture_data(interval=1)
@@ -505,12 +501,6 @@ def main():
             # if gc.mode != 'Normal Channel':
             #     print(data_string)
 
-
-
-       
-            
-
-
 if __name__ == "__main__":
     try:
         main()
@@ -520,20 +510,3 @@ if __name__ == "__main__":
             p.throttle = 0
         # May want to add code to stop gracefully here 
         # e.g. turn off relays or pumps
-        
-    except WatchDogTimeout:
-        print('Code Stopped by WatchDog Timeout!')
-        # supervisor.reload()
-        # NB, sometimes soft reset is not enough! need to do hard reset here
-        print('Performing hard reset in 15s')
-        time.sleep(15)
-        microcontroller.reset()
-
-    except Exception as e:
-        print(f'Code stopped by unhandled exception:')
-        print(traceback.format_exception(None, e, e.__traceback__))
-        # Can we log here?
-        print('Performing a hard reset in 15s')
-        time.sleep(15) #Make sure this is shorter than watchdog timeout
-        # supervisor.reload()
-        microcontroller.reset()
