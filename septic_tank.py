@@ -336,7 +336,7 @@ def main():
                 if pump_index > NUM_PUMPS:
                     pump_index = 1
 
-            display_summary()
+        display_summary()
 
 
     def filter_data(filter_string=None, decimal_places=1):
