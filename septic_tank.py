@@ -70,7 +70,7 @@ def main():
     # instantiate the MCU helper class to set up the system
     mcu = Mcu(watchdog_timeout=60)
     mcu.booting = True # A flag to record boot messages
-    mcu.log.info(f'STARTING {__filename__} {__version__}')
+    mcu.log.info(f'STARTING {mcu.uid} {__filename__} {__version__}')
 
     # Choose minimum logging level to process
     mcu.log.setLevel(LOGLEVEL)
