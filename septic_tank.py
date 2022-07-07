@@ -28,8 +28,8 @@ AIO = True
 
 GASCARD_SAMPLE_DURATION = 2 # minutes
 GASCARD_INTERVAL = 10 # minutes
-# GASCARD = True
-GASCARD = False
+GASCARD = True
+# GASCARD = False
 NUM_PUMPS = 2
 PH_CHANNELS = 1
 AIO_GROUP = 'boness'
@@ -68,7 +68,7 @@ def main():
     }
 
     # instantiate the MCU helper class to set up the system
-    mcu = Mcu(watchdog_timeout=240)
+    mcu = Mcu(watchdog_timeout=60)
     mcu.booting = True # A flag to record boot messages
     mcu.log.info(f'STARTING {__filename__} {__version__}')
 
@@ -95,6 +95,12 @@ def main():
     mcu.archive_file('log.txt')
     mcu.archive_file('data.txt')
     mcu.watchdog.feed()
+
+    if AIO:
+        mcu.wifi_connect()
+        mcu.aio_setup(log_feed='log', group=AIO_GROUP)
+        mcu.subscribe('pump1-speed')
+        mcu.aio_send_log() # Send the boot log so far
 
 
     def connect_thermocouple_channels():
@@ -154,6 +160,7 @@ def main():
     def connect_gascard():
         try:
             uart = busio.UART(board.TX, board.RX, baudrate=57600)
+            mcu.log.warning('Waiting for Gascard') #For debug really, can be removed
             gc = Gascard(uart)
             gc.log.addHandler(mcu.loghandler)
             gc.log.setLevel(LOGLEVEL)
@@ -209,12 +216,6 @@ def main():
     time.sleep(5)
 
 
-    if AIO:
-        mcu.wifi_connect()
-        mcu.aio_setup(log_feed='log', group=AIO_GROUP)
-        mcu.subscribe('pump1-speed')
-#         mcu.subscribe('pump2-speed')
-#         mcu.subscribe('pump3-speed')
 
     def parse_feeds():
         if mcu.aio_connected:
