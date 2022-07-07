@@ -23,8 +23,8 @@ __filename__ = "septic_tank.py"
 AIO = True
 # AIO = False
 
-GASCARD_PUMP_TIME = 120 #2 minutes
-GASCARD_INTERVAL = 600 #10 minutes
+GASCARD_PUMP_TIME = 12 #2 minutes
+GASCARD_INTERVAL = 60 #10 minutes
 # GASCARD = True
 GASCARD = False
 NUM_PUMPS = 2
@@ -42,7 +42,7 @@ pumps = []
 def main():
 
     # defaults, will be overwritten if connected to AIO
-    pump_speeds = [0.5, 0.5, 0.5]
+    pump_speeds = [0.6, 0.6, 0.6]
     pump_index = 1
 
     # Optional list of expected I2C devices and addresses
@@ -105,7 +105,11 @@ def main():
         aio.log.setLevel(LOGLEVEL)
         mcu.loghandler.aio = aio
         aio.subscribe('pump1-speed')
-
+        aio.subscribe('pump2-speed')
+        aio.subscribe('pump3-speed')
+        pump_speeds[0] = aio.subscribed_feeds['pump1-speed']['last_value']
+        pump_speeds[1] = aio.subscribed_feeds['pump2-speed']['last_value']
+        pump_speeds[2] = aio.subscribed_feeds['pump3-speed']['last_value']
 
     def connect_thermocouple_channels():
         tc_addresses = [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67]
@@ -149,7 +153,7 @@ def main():
     def connect_pumps():
         try:
             global pumps
-            pump_driver = MotorKit(i2c=mcu.i2c, address=78)
+            pump_driver = MotorKit(i2c=mcu.i2c, address=0x70)
             pumps = [pump_driver.motor1, pump_driver.motor2, pump_driver.motor3, pump_driver.motor4]
 
             # Drop any unused pumps as defined by the NUM_PUMPS parameter
@@ -313,28 +317,29 @@ def main():
                 i = tc_channels.index(tc)
                 mcu.data[f'tc{i+1}'] = tc.temperature
 
-        if gc:
-            if (time.monotonic() - timer_gascard_interval) >= GASCARD_INTERVAL:
-                timer_gascard_interval = time.monotonic()
-                timer_pump = time.monotonic()
+        # if gc:
+        if (time.monotonic() - timer_gascard_interval) >= GASCARD_INTERVAL:
+            timer_gascard_interval = time.monotonic()
+            timer_pump = time.monotonic()
 
-                mcu.log.info(f'starting pump after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
-                speed = pump_speeds[pump_index-1]
-                pumps[pump_index-1].throttle = speed
-                mcu.log.info(f'running pump {pump_index} at speed={speed}')
+            mcu.log.info(f'starting pump after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
+            speed = pump_speeds[pump_index-1]
+            pumps[pump_index-1].throttle = speed
+            mcu.log.info(f'running pump {pump_index} at speed={speed}')
 
 
-            if time.monotonic() - timer_pump > GASCARD_PUMP_TIME:
+        if time.monotonic() - timer_pump > GASCARD_PUMP_TIME:
+            if gc:
                 mcu.data[f'gc{pump_index}'] = gc.concentration
                 mcu.log.info(f'Capturing gascard sample')
-                mcu.log.info(f'disabling pump after GASCARD_PUMP_TIME = {GASCARD_PUMP_TIME}')
-                # Push timer_pump out into the future so this won't trigger again until after the next sample
-                timer_pump = timer_gascard_interval + GASCARD_INTERVAL*2
-                pumps[pump_index-1].throttle = 0
+            mcu.log.info(f'disabling pump after GASCARD_PUMP_TIME = {GASCARD_PUMP_TIME}')
+            # Push timer_pump out into the future so this won't trigger again until after the next sample
+            timer_pump = timer_gascard_interval + GASCARD_INTERVAL*2
+            pumps[pump_index-1].throttle = 0
 
-                pump_index += 1
-                if pump_index > NUM_PUMPS:
-                    pump_index = 1
+            pump_index += 1
+            if pump_index > NUM_PUMPS:
+                pump_index = 1
 
         display_summary()
 
