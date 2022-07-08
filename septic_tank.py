@@ -193,14 +193,15 @@ def main():
     ph_channels = connect_ph_channels()
     pumps = connect_pumps()
 
-    display.clear()
-    display.write(f'{len(tc_channels)} TC channels')
-    display.set_cursor(0,1)
-    display.write(f'{len(ph_channels)} pH channels')
-    display.set_cursor(0,2)
-    display.write(f'{len(pumps)} air pumps')
-    display.set_cursor(0,3)
-    display.write(f'Waiting for gascard')
+    if display:
+        display.clear()
+        display.write(f'{len(tc_channels)} TC channels')
+        display.set_cursor(0,1)
+        display.write(f'{len(ph_channels)} pH channels')
+        display.set_cursor(0,2)
+        display.write(f'{len(pumps)} air pumps')
+        display.set_cursor(0,3)
+        display.write(f'Waiting for gascard')
 
     if GASCARD:
         gc = connect_gascard()
@@ -208,19 +209,20 @@ def main():
         gc = None
 
     # Display gascard info
-    if gc:
-        display.clear()
-        display.write(f'Gascard FW={gc.firmware_version}')
-        display.set_cursor(0,1)
-        display.write(f'Serial Num={gc.serial_number}')
-        display.set_cursor(0,2)
-        display.write(f'conf={gc.config_register} freq={gc.frequency}')
-        display.set_cursor(0,3)
-        display.write(f'TC={gc.time_constant} SW={gc.switches_state}')
-    else:
-        display.clear()
-        display.write(f'Gascard not used')
-    time.sleep(5)
+    if display:
+        if gc:
+            display.clear()
+            display.write(f'Gascard FW={gc.firmware_version}')
+            display.set_cursor(0,1)
+            display.write(f'Serial Num={gc.serial_number}')
+            display.set_cursor(0,2)
+            display.write(f'conf={gc.config_register} freq={gc.frequency}')
+            display.set_cursor(0,3)
+            display.write(f'TC={gc.time_constant} SW={gc.switches_state}')
+        else:
+            display.clear()
+            display.write(f'Gascard not used')
+        time.sleep(3)
 
 
     def parse_feeds():
@@ -317,32 +319,32 @@ def main():
                 i = tc_channels.index(tc)
                 mcu.data[f'tc{i+1}'] = tc.temperature
 
-        # if gc:
-        if (time.monotonic() - timer_gascard_interval) >= GASCARD_INTERVAL:
-            timer_gascard_interval = time.monotonic()
-            timer_pump = time.monotonic()
+        if len(pumps) > 0:
+            if (time.monotonic() - timer_gascard_interval) >= GASCARD_INTERVAL:
+                timer_gascard_interval = time.monotonic()
+                timer_pump = time.monotonic()
 
-            mcu.log.info(f'starting pump{pump_index} after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
-            speed = pump_speeds[pump_index-1]
-            pumps[pump_index-1].throttle = speed
-            mcu.log.info(f'running pump {pump_index} at speed={speed}')
+                mcu.log.info(f'starting pump{pump_index} after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
+                speed = pump_speeds[pump_index-1]
+                pumps[pump_index-1].throttle = speed
+                mcu.log.info(f'running pump {pump_index} at speed={speed}')
 
 
-        if time.monotonic() - timer_pump > GASCARD_PUMP_TIME:
-            if gc:
-                mcu.data[f'gc{pump_index}'] = gc.concentration
-                mcu.log.info(f'Capturing gascard sample')
-            mcu.log.info(f'disabling pump{pump_index} after GASCARD_PUMP_TIME = {GASCARD_PUMP_TIME}')
-            # Push timer_pump out into the future so this won't trigger again until after the next sample
-            timer_pump = timer_gascard_interval + GASCARD_INTERVAL*2
-            pumps[pump_index-1].throttle = 0
+            if time.monotonic() - timer_pump > GASCARD_PUMP_TIME:
+                if gc:
+                    mcu.data[f'gc{pump_index}'] = gc.concentration
+                    mcu.log.info(f'Capturing gascard sample')
 
-            pump_index += 1
-            if pump_index > NUM_PUMPS:
-                pump_index = 1
+                    mcu.log.info(f'disabling pump{pump_index} after GASCARD_PUMP_TIME = {GASCARD_PUMP_TIME}')
+                    # Push timer_pump out into the future so this won't trigger again until after the next sample
+                    timer_pump = timer_gascard_interval + GASCARD_INTERVAL*2
+                    pumps[pump_index-1].throttle = 0
 
+                    pump_index += 1
+                    if pump_index > NUM_PUMPS:
+                        pump_index = 1
+        
         display_summary()
-
 
     def filter_data(filter_string=None, decimal_places=1):
 
@@ -391,36 +393,36 @@ def main():
             print('Leaving Calibration Mode')
 
     def display_summary():
-        if gc:
-            display.set_cursor(0,0)
-            line = f'pump{pump_index}={pumps[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C         '[:20]
+        if display:
+            if len(pumps) > 0:
+                display.set_cursor(0,0)
+                line = f'pump{pump_index}={pumps[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C         '
+                display.write(line[:20])
 
-            display.write(line[:20])
+            if gc:
+                display.set_cursor(0,1)
+                line = ''
+                data = filter_data('gc', decimal_places=4)
+                for key in sorted(data):
+                    # display as float with max 4 decimal places, and max 7 chars long
+                        line += f' {data[key]:.4f}'[:7]
+                line = line[1:] #drop the first space, to keep within 20 chars
+                display.write(line[:20])
 
-            display.set_cursor(0,1)
-            line = ''
-            data = filter_data('gc', decimal_places=4)
+            display.set_cursor(0,2)
+            line = 'tc'
+            data = filter_data('tc', decimal_places=1)
+            data.pop('tc4', None) # Remove the ambient temperature thermocouple
             for key in sorted(data):
-                # display as float with max 4 decimal places, and max 7 chars long
-                    line += f' {data[key]:.4f}'[:7]
-            line = line[1:] #drop the first space, to keep within 20 chars
+                line+= f' {data[key]:3.1f}'
             display.write(line[:20])
 
-
-        display.set_cursor(0,2)
-        line = 'tc'
-        data = filter_data('tc', decimal_places=1)
-        data.pop('tc4', None) # Remove the ambient temperature thermocouple
-        for key in sorted(data):
-            line+= f' {data[key]:3.1f}'
-        display.write(line[:20])
-
-        display.set_cursor(0,3)
-        line = 'ph'
-        data = filter_data('ph', decimal_places=2)
-        for key in sorted(data):
-            line+= f' {data[key]:3.2f}'
-        display.write(line[:20])
+            display.set_cursor(0,3)
+            line = 'ph'
+            data = filter_data('ph', decimal_places=2)
+            for key in sorted(data):
+                line+= f' {data[key]:3.2f}'
+            display.write(line[:20])
 
     def display_gascard_reading():
         display.labels[0]='CH4 Conc='
@@ -485,8 +487,9 @@ def main():
                 gc.write_command(string)
 
 
-    display.clear()
-    mcu.log.info(f'BOOT complete at {mcu.get_timestamp()}')
+    mcu.log.info(f'BOOT complete at {mcu.get_timestamp()} UTC')
+    if display:
+        display.clear()
     mcu.booting = False # Stop accumulating boot log messages
     aio.publish_long('log', mcu.logdata) # Send the boot log
 
