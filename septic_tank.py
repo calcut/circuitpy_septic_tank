@@ -335,14 +335,14 @@ def main():
                     mcu.data[f'gc{pump_index}'] = gc.concentration
                     mcu.log.info(f'Capturing gascard sample')
 
-                    mcu.log.info(f'disabling pump{pump_index} after GASCARD_PUMP_TIME = {GASCARD_PUMP_TIME}')
-                    # Push timer_pump out into the future so this won't trigger again until after the next sample
-                    timer_pump = timer_gascard_interval + GASCARD_INTERVAL*2
-                    pumps[pump_index-1].throttle = 0
+                mcu.log.info(f'disabling pump{pump_index} after GASCARD_PUMP_TIME = {GASCARD_PUMP_TIME}')
+                # Push timer_pump out into the future so this won't trigger again until after the next sample
+                timer_pump = timer_gascard_interval + GASCARD_INTERVAL*2
+                pumps[pump_index-1].throttle = 0
 
-                    pump_index += 1
-                    if pump_index > NUM_PUMPS:
-                        pump_index = 1
+                pump_index += 1
+                if pump_index > NUM_PUMPS:
+                    pump_index = 1
         
         display_summary()
 
