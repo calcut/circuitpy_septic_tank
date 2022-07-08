@@ -107,9 +107,9 @@ def main():
         aio.subscribe('pump1-speed')
         aio.subscribe('pump2-speed')
         aio.subscribe('pump3-speed')
-        pump_speeds[0] = aio.subscribed_feeds['pump1-speed']['last_value']
-        pump_speeds[1] = aio.subscribed_feeds['pump2-speed']['last_value']
-        pump_speeds[2] = aio.subscribed_feeds['pump3-speed']['last_value']
+        pump_speeds[0] = float(aio.subscribed_feeds['pump1-speed']['last_value'])
+        pump_speeds[1] = float(aio.subscribed_feeds['pump2-speed']['last_value'])
+        pump_speeds[2] = float(aio.subscribed_feeds['pump3-speed']['last_value'])
 
     def connect_thermocouple_channels():
         tc_addresses = [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67]
