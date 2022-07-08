@@ -322,7 +322,7 @@ def main():
             timer_gascard_interval = time.monotonic()
             timer_pump = time.monotonic()
 
-            mcu.log.info(f'starting pump after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
+            mcu.log.info(f'starting pump{pump_index} after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
             speed = pump_speeds[pump_index-1]
             pumps[pump_index-1].throttle = speed
             mcu.log.info(f'running pump {pump_index} at speed={speed}')
@@ -332,7 +332,7 @@ def main():
             if gc:
                 mcu.data[f'gc{pump_index}'] = gc.concentration
                 mcu.log.info(f'Capturing gascard sample')
-            mcu.log.info(f'disabling pump after GASCARD_PUMP_TIME = {GASCARD_PUMP_TIME}')
+            mcu.log.info(f'disabling pump{pump_index} after GASCARD_PUMP_TIME = {GASCARD_PUMP_TIME}')
             # Push timer_pump out into the future so this won't trigger again until after the next sample
             timer_pump = timer_gascard_interval + GASCARD_INTERVAL*2
             pumps[pump_index-1].throttle = 0
