@@ -1,5 +1,6 @@
 import time
 from circuitpy_mcu.mcu import Mcu
+from circuitpy_mcu.ota_bootloader import reset, enable_watchdog
 from circuitpy_mcu.display import LCD_20x4
 from circuitpy_mcu.aio import Aio_http
 from circuitpy_septic_tank.gascard import Gascard
@@ -23,8 +24,8 @@ __filename__ = "septic_tank.py"
 AIO = True
 # AIO = False
 
-GASCARD_PUMP_TIME = 12 #2 minutes
-GASCARD_INTERVAL = 60 #10 minutes
+GASCARD_PUMP_TIME = 120 #2 minutes
+GASCARD_INTERVAL = 600 #10 minutes
 # GASCARD = True
 GASCARD = False
 NUM_PUMPS = 2
@@ -515,10 +516,13 @@ def main():
 
 if __name__ == "__main__":
     try:
+        enable_watchdog(timeout=60)
         main()
     except KeyboardInterrupt:
         print('Code Stopped by Keyboard Interrupt')
         for p in pumps:
             p.throttle = 0
-        # May want to add code to stop gracefully here 
-        # e.g. turn off relays or pumps
+
+    except Exception as e:
+        print(f'Code stopped by unhandled exception:')
+        reset(e)
