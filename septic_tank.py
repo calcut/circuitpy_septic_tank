@@ -101,9 +101,13 @@ def main():
     if AIO:
         mcu.wifi_connect()
         group = f'{AIO_GROUP}-{mcu.id}'
+        if display:
+            display.show_text(f'AIO: {group}')
         aio = Aio_http(mcu.requests, group, mcu.loghandler)
         aio.log.setLevel(LOGLEVEL)
         mcu.loghandler.aio = aio
+        if display:
+            display.show_text('Subscribing to feeds')
         aio.subscribe('pump1-speed')
         aio.subscribe('pump2-speed')
         aio.subscribe('pump3-speed')
