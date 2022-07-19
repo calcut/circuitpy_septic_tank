@@ -24,8 +24,8 @@ __filename__ = "septic_tank.py"
 AIO = True
 # AIO = False
 
-GASCARD_PUMP_TIME = 120 #2 minutes
-GASCARD_INTERVAL = 600 #10 minutes
+GASCARD_PUMP_TIME = 60 #1 minutes
+GASCARD_INTERVAL = 300 #5 minutes
 GASCARD = True
 # GASCARD = False
 NUM_PUMPS = 2
@@ -262,11 +262,15 @@ def main():
             # location = "57.2445673, -4.3978963, 220" #Gorthleck, as an example
 
             #This will automatically limit its rate to not get throttled by AIO
-            aio.publish_feeds(data, interval=interval, location=None)
+            success = aio.publish_feeds(data, interval=interval, location=None)
 
-            # don't keep transmitting this until next updated.
-            if 'gc1' in mcu.data:
-                del mcu.data['gc1'] # Simplified for one channel
+            if success:
+                # don't keep transmitting this until next updated.
+                for p in range(len(pumps)):
+                    if f'gc{p+1}' in mcu.data:
+                        del mcu.data[f'gc{p+1}'] # Simplified for one channel
+                        mcu.log.info(f'deleted datapoint gc{p+1}')
+
 
     def log_sdcard(interval=30):
         nonlocal timer_sd
@@ -329,16 +333,15 @@ def main():
                 timer_gascard_interval = time.monotonic()
                 timer_pump = time.monotonic()
 
-                mcu.log.info(f'starting pump{pump_index} after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
                 speed = pump_speeds[pump_index-1]
                 pumps[pump_index-1].throttle = speed
-                mcu.log.info(f'running pump {pump_index} at speed={speed}')
+                mcu.log.info(f'running pump {pump_index} at speed={speed} after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
 
 
             if time.monotonic() - timer_pump > GASCARD_PUMP_TIME:
                 if gc:
                     mcu.data[f'gc{pump_index}'] = gc.concentration
-                    mcu.log.info(f'Capturing gascard sample')
+                    mcu.log.info(f'Capturing gascard gc{pump_index} sample')
 
                 mcu.log.info(f'disabling pump{pump_index} after GASCARD_PUMP_TIME = {GASCARD_PUMP_TIME}')
                 # Push timer_pump out into the future so this won't trigger again until after the next sample
