@@ -25,7 +25,7 @@ AIO = True
 # AIO = False
 
 GASCARD_PUMP_TIME = 120 #2 minutes
-GASCARD_INTERVAL = 1200 #20 minutes
+GASCARD_INTERVAL = 300 #5 minutes
 GASCARD = True
 # GASCARD = False
 NUM_PUMPS = 2
