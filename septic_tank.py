@@ -328,6 +328,12 @@ def main():
                 i = tc_channels.index(tc)
                 mcu.data[f'tc{i+1}'] = tc.temperature
 
+            mcu.data[f'debug-sample'] = gc.sample
+            mcu.data[f'debug-reference'] = gc.reference
+            mcu.data[f'debug-concentration'] = gc.concentration
+            mcu.data[f'debug-pressure'] = gc.pressure
+            mcu.data[f'debug-temperature'] = gc.temperature
+
         if len(pumps) > 0:
             if (time.monotonic() - timer_gascard_interval) >= GASCARD_INTERVAL:
                 timer_gascard_interval = time.monotonic()
