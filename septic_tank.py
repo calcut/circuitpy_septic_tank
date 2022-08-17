@@ -24,8 +24,8 @@ __filename__ = "septic_tank.py"
 AIO = True
 # AIO = False
 
-GASCARD_PUMP_TIME = 120 #2 minutes
-GASCARD_INTERVAL = 300 #5 minutes
+GASCARD_PUMP_TIME = 2*60 #2 minutes
+GASCARD_INTERVAL = 4*60*60 #4 hours
 GASCARD = True
 # GASCARD = False
 NUM_PUMPS = 2
