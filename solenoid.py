@@ -19,7 +19,9 @@ import traceback
 # global variable so valves can be shut down after keyboard interrupt
 valves = []
 NUM_VALVES = 1
-
+TOGGLE_DURATION = 5 #seconds
+VALVE_INACTIVE_TIME= 1 #minute
+VALVE_ACTIVE_TIME = 1 #minute
 
 def main():
 
@@ -36,7 +38,7 @@ def main():
 
     try:
         global valves
-        valve_driver = MotorKit(i2c=mcu.i2c, address=0x70)
+        valve_driver = MotorKit(i2c=mcu.i2c, address=0x78)
         valves = [valve_driver.motor1, valve_driver.motor2, valve_driver.motor3, valve_driver.motor4]
 
         # Drop any unused valves as defined by the NUM_VALVES parameter
@@ -49,7 +51,7 @@ def main():
 
     def toggle_valve(index):
         global valves
-        mcu.log.info(f'Toggling valve {index}')
+        # mcu.log.info(f'Toggling valve {index}')
         if valves[index].throttle == 1:
             close_valve(index)
         else:
@@ -79,35 +81,53 @@ def main():
                 mcu.log.warning(f'string {string} not valid for valve settings\n'
                                  +'input valve settings in format "v valve_number" e.g. v0')
 
-    rtc.datetime = time.struct_time((2017,1,9,15,6,0,0,9,-1))
+    def set_alarm(hour=0, minute=1, repeat="daily"):
+        # NB setting alarm seconds is not supported by the hardware
+        alarm_time = time.struct_time((2000,1,1,hour,minute,0,0,19,-1))
+        rtc.alarm = (alarm_time, repeat)
+        print(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
 
-    rtc.alarm = (time.struct_time((2017,1,9,15,6,0,0,19,-1)), "daily")
-    rtc.alarm2 = (time.struct_time((2017,1,9,16,6,0,0,19,-1)), "daily")
+    def set_countdown_alarm(hours=0, minutes=1, repeat="daily"):
+        # NB setting alarm seconds is not supported by the hardware
+        posix_time = time.mktime(rtc.datetime)
+        alarm_time = time.localtime(posix_time + minutes*60 + hours*60*60)
+        rtc.alarm = (alarm_time, repeat)
+        print(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
+
 
     timer_A = 0
+    timer_toggle=0
+    timer_close=0
+    # rtc.datetime=time.struct_time([2022, 8, 17, 21, 27, 00, 2, -1, -1])
+
+    valve_active = True
+    set_countdown_alarm(minutes=VALVE_ACTIVE_TIME)
+
     while True:
         mcu.read_serial(send_to=usb_serial_parser)
         microcontroller.watchdog.feed()
         if time.monotonic() - timer_A > 1:
-            print('')
 
             timer_A = time.monotonic()
-            # print(mcu.get_timestamp())
-
-            
-            print(rtc.datetime)
-            print(f'{rtc.alarm_status=}')
+            t = rtc.datetime
+            print(f'{t.tm_year}-{t.tm_mon:02}-{t.tm_mday:02} {t.tm_hour:02}:{t.tm_min:02}:{t.tm_sec:02}')
             if rtc.alarm_status:
+                print('RTC Alarm detected')
                 rtc.alarm_status = False
-                print('cancelling alarm!')
 
-            """
-            TODO 
-            Get RTC chip working, needs battery really
-            concept of pulsing mode. pulsing on/off for 8 mins.
+                if valve_active:
+                    valve_active = False
+                    for v in valves:
+                        v.throttle = 0
+                    set_countdown_alarm(minutes=VALVE_INACTIVE_TIME)
+                else:
+                    valve_active = True
+                    set_countdown_alarm(minutes=VALVE_ACTIVE_TIME)  
 
-            
-            """
+        if valve_active:
+            if time.monotonic() - timer_toggle > TOGGLE_DURATION:
+                timer_toggle = time.monotonic()
+                toggle_valve(0)
 
 
 if __name__ == "__main__":
