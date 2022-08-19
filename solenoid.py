@@ -1,7 +1,6 @@
 from adafruit_motorkit import MotorKit
 from circuitpy_mcu.ota_bootloader import reset, enable_watchdog
 from circuitpy_mcu.mcu import Mcu
-from circuitpy_mcu.aio import Aio_http
 
 import adafruit_pcf8523
 import time
@@ -10,10 +9,8 @@ import board
 
 # scheduling and event/error handling libs
 from watchdog import WatchDogTimeout
-import supervisor
 import microcontroller
 import adafruit_logging as logging
-import traceback
 
 
 # global variable so valves can be shut down after keyboard interrupt
@@ -22,6 +19,8 @@ NUM_VALVES = 1
 TOGGLE_DURATION = 5 #seconds
 VALVE_INACTIVE_TIME= 1 #minute
 VALVE_ACTIVE_TIME = 1 #minute
+AIO_GROUP = 'boness-dev'
+LOGLEVEL = logging.DEBUG
 
 def main():
 
@@ -34,7 +33,8 @@ def main():
     }
 
     mcu = Mcu()
-    rtc = adafruit_pcf8523.PCF8523(mcu.i2c)
+    group = f'{AIO_GROUP}-{mcu.id}'
+    mcu.rtc = adafruit_pcf8523.PCF8523(mcu.i2c)
 
     try:
         global valves
@@ -84,36 +84,46 @@ def main():
     def set_alarm(hour=0, minute=1, repeat="daily"):
         # NB setting alarm seconds is not supported by the hardware
         alarm_time = time.struct_time((2000,1,1,hour,minute,0,0,19,-1))
-        rtc.alarm = (alarm_time, repeat)
+        mcu.rtc.alarm = (alarm_time, repeat)
         print(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
 
     def set_countdown_alarm(hours=0, minutes=1, repeat="daily"):
         # NB setting alarm seconds is not supported by the hardware
-        posix_time = time.mktime(rtc.datetime)
+        posix_time = time.mktime(mcu.rtc.datetime)
         alarm_time = time.localtime(posix_time + minutes*60 + hours*60*60)
-        rtc.alarm = (alarm_time, repeat)
+        mcu.rtc.alarm = (alarm_time, repeat)
         print(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
 
-
     timer_A = 0
+    timer_networking = 0
     timer_toggle=0
-    timer_close=0
-    # rtc.datetime=time.struct_time([2022, 8, 17, 21, 27, 00, 2, -1, -1])
-
     valve_active = True
     set_countdown_alarm(minutes=VALVE_ACTIVE_TIME)
 
     while True:
         mcu.read_serial(send_to=usb_serial_parser)
         microcontroller.watchdog.feed()
-        if time.monotonic() - timer_A > 1:
 
-            timer_A = time.monotonic()
-            t = rtc.datetime
-            print(f'{t.tm_year}-{t.tm_mon:02}-{t.tm_mday:02} {t.tm_hour:02}:{t.tm_min:02}:{t.tm_sec:02}')
-            if rtc.alarm_status:
+        if time.monotonic() - timer_networking > 5:
+            timer_networking = time.monotonic()
+            if not mcu.connectivity_check():
+                mcu.log.info('reconnecting wifi')
+                mcu.wifi_connect(attempts=3, aio_group=group)
+
+            if mcu.wifi_connected:
+                mcu.aio.receive(interval=10)
+                mcu.aio.publish_feeds(mcu.data, interval=10, location=None)
+            else:
+                mcu.log.debug('wifi not connected, not publishing')
+            t = mcu.rtc.datetime
+            timestamp = f'{t.tm_year}-{t.tm_mon:02}-{t.tm_mday:02} {t.tm_hour:02}:{t.tm_min:02}:{t.tm_sec:02}'
+            mcu.data['debug'] = timestamp
+
+
+        if time.monotonic() - timer_A > 1:
+            if mcu.rtc.alarm_status:
                 print('RTC Alarm detected')
-                rtc.alarm_status = False
+                mcu.rtc.alarm_status = False
 
                 if valve_active:
                     valve_active = False
