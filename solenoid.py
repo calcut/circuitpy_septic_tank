@@ -21,6 +21,7 @@ VALVE_INACTIVE_TIME= 1 #minute
 VALVE_ACTIVE_TIME = 1 #minute
 AIO_GROUP = 'boness-dev'
 LOGLEVEL = logging.DEBUG
+# LOGLEVEL = logging.INFO
 
 def main():
 
@@ -33,8 +34,16 @@ def main():
     }
 
     mcu = Mcu()
+    mcu.log.setLevel(LOGLEVEL)
+
+    # Decide how to handle offline periods 
+    mcu.offline_retry_connection =  60 #seconds
+
+    # mcu.aio.log.setLevel(LOGLEVEL)
     group = f'{AIO_GROUP}-{mcu.id}'
     mcu.rtc = adafruit_pcf8523.PCF8523(mcu.i2c)
+
+    mcu.aio_setup(group)
 
     try:
         global valves
@@ -106,15 +115,18 @@ def main():
 
         if time.monotonic() - timer_networking > 5:
             timer_networking = time.monotonic()
-            if not mcu.connectivity_check():
-                mcu.log.info('reconnecting wifi')
-                mcu.wifi_connect(attempts=3, aio_group=group)
+            mcu.aio_sync()
+            # ip = mcu.pool.getaddrinfo(host='adafruit.com', port=443)
+            # print(f'{ip[0][5]=}')
+            # if not mcu.connectivity_check():
+            #     mcu.log.info('reconnecting wifi')
+            #     mcu.wifi_connect(attempts=3, aio_group=group)
 
-            if mcu.wifi_connected:
-                mcu.aio.receive(interval=10)
-                mcu.aio.publish_feeds(mcu.data, interval=10, location=None)
-            else:
-                mcu.log.debug('wifi not connected, not publishing')
+            # if mcu.wifi_connected:
+            #     mcu.aio.receive(interval=10)
+            #     mcu.aio.publish_feeds(mcu.data, interval=10, location=None)
+            # else:
+            #     mcu.log.debug('wifi not connected, not publishing')
             t = mcu.rtc.datetime
             timestamp = f'{t.tm_year}-{t.tm_mon:02}-{t.tm_mday:02} {t.tm_hour:02}:{t.tm_min:02}:{t.tm_sec:02}'
             mcu.data['debug'] = timestamp
