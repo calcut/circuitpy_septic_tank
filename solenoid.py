@@ -33,15 +33,17 @@ def main():
         '0x77' : 'Temp/Humidity/Pressure BME280' # Built into some ESP32S2 feathers 
     }
 
-    mcu = Mcu()
+    mcu = Mcu(offline_mode=True)
     mcu.log.setLevel(LOGLEVEL)
+    mcu.rtc = adafruit_pcf8523.PCF8523(mcu.i2c)
+
+    # Networking Setup
+    group = f'{AIO_GROUP}-{mcu.id}'
+    mcu.wifi_connect(attempts=4, aio_group=group)
 
     # Decide how to handle offline periods 
-    mcu.offline_retry_connection =  60 #seconds
-
-    # mcu.aio.log.setLevel(LOGLEVEL)
-    group = f'{AIO_GROUP}-{mcu.id}'
-    mcu.rtc = adafruit_pcf8523.PCF8523(mcu.i2c)
+    mcu.offline_retry_connection =  60 #retry every 60 seconds, default
+    # mcu.offline_retry_connection =  False #Hard reset
 
     mcu.aio_setup(group)
 
