@@ -1,4 +1,5 @@
 from adafruit_motorkit import MotorKit
+from adafruit_motor.motor import DCMotor
 from circuitpy_mcu.ota_bootloader import reset, enable_watchdog
 from circuitpy_mcu.mcu import Mcu
 
@@ -12,13 +13,72 @@ import adafruit_logging as logging
 
 # global variable so valves can be shut down after keyboard interrupt
 valves = []
-NUM_VALVES = 1
+NUM_VALVES = 4
 TOGGLE_DURATION = 5 #seconds
-VALVE_INACTIVE_TIME= 1 #minute
-VALVE_ACTIVE_TIME = 1 #minute
+VALVE_PERIOD= 2 #minutes until next active time
+VALVE_ACTIVE_DURATION = 1 #minute
+NUM_BURSTS = 6
 AIO_GROUP = 'boness-valve'
-LOGLEVEL = logging.DEBUG
-# LOGLEVEL = logging.INFO
+# LOGLEVEL = logging.DEBUG
+LOGLEVEL = logging.INFO
+WIFI = False
+
+class Valve():
+
+    def __init__(self, motor:DCMotor, name, loghandler=None):
+        self.motor = motor
+        self.motor.throttle = 0
+        self.name = name
+
+        self.active = False
+        self.toggle_duration = TOGGLE_DURATION
+        self.num_bursts = NUM_BURSTS
+        self.timer_toggle = time.monotonic()
+        self.timer_active = time.monotonic()
+        self.burst = 0
+
+        # Set up logging
+        self.log = logging.getLogger(self.name)
+        if loghandler:
+            self.log.addHandler(loghandler)
+
+    def toggle(self):
+        # mcu.log.info(f'Toggling valve {index}')
+        if self.motor.throttle == 1:
+            self.close()
+        else:
+            self.open()
+
+    def open(self):
+        self.motor.throttle = 1
+        self.log.info(f'Opening Valve')
+
+    def close(self):
+        self.motor.throttle = 0
+        self.log.info(f'Closing Valve')
+
+    def display(self, message):
+        # Special log command with custom level, to request sending to attached display
+        self.log.log(level=25, msg=message)
+
+    def set_active(self):
+        self.active = True
+        self.timer_active = time.monotonic()
+
+    def update(self):
+        if self.active:
+            if self.burst >= self.num_bursts:
+                self.burst = 0
+                self.active = False
+                self.close()
+
+            elif time.monotonic() - self.timer_toggle > TOGGLE_DURATION:
+                self.timer_toggle = time.monotonic()
+                self.toggle()
+                if self.motor.throttle == 1:
+                    self.burst += 1
+
+
 
 def main():
 
@@ -35,54 +95,45 @@ def main():
 
     mcu.attach_rtc_pcf8523()
 
+    # External I2C display
+    mcu.attach_display_sparkfun_20x4()
+
     # Use SD card
     if mcu.attach_sdcard():
         mcu.delete_archive()
         mcu.archive_file('log.txt')
 
-    # Networking Setup
-    mcu.wifi.connect()
+    if WIFI:
+        # Networking Setup
+        mcu.wifi.connect()
 
-    # Decide how to handle offline periods 
-    mcu.wifi.offline_retry_connection =  60 #retry every 60 seconds, default
-    # mcu.wifi.offline_retry_connection =  False #Hard reset
+        # Decide how to handle offline periods 
+        mcu.wifi.offline_retry_connection =  60 #retry every 60 seconds, default
+        # mcu.wifi.offline_retry_connection =  False #Hard reset
 
-    if mcu.aio_setup(aio_group=f'{AIO_GROUP}-{mcu.id}'):
-        mcu.aio.connect()
-        mcu.aio.subscribe('led-color')
-        mcu.aio.subscribe('active-minutes')
-        mcu.aio.subscribe('inactive-minutes')
+        if mcu.aio_setup(aio_group=f'{AIO_GROUP}-{mcu.id}'):
+            mcu.aio.connect()
+            mcu.aio.subscribe('led-color')
+            mcu.aio.subscribe('active-minutes')
+            mcu.aio.subscribe('inactive-minutes')
 
     try:
         global valves
         valve_driver = MotorKit(i2c=mcu.i2c, address=0x78)
-        valves = [valve_driver.motor1, valve_driver.motor2, valve_driver.motor3, valve_driver.motor4]
+        motors = [valve_driver.motor1, valve_driver.motor2, valve_driver.motor3, valve_driver.motor4]
 
         # Drop any unused valves as defined by the NUM_VALVES parameter
-        valves = valves[:NUM_VALVES]
+        motors = motors[:NUM_VALVES]
+        valves = []
+        
+        i=0
+        for m in motors:
+            i+=1
+            valves.append(Valve(motor=m, name=f'V{i}', loghandler=mcu.loghandler))
         
     except Exception as e:
         mcu.handle_exception(e)
         mcu.log.warning('valve driver not found')
-
-
-    def toggle_valve(index):
-        global valves
-        # mcu.log.info(f'Toggling valve {index}')
-        if valves[index].throttle == 1:
-            close_valve(index)
-        else:
-            open_valve(index)
-
-    def open_valve(index):
-        global valves
-        valves[index].throttle = 1
-        mcu.log.info(f'Opening Valve {index}')
-
-    def close_valve(index):
-        global valves
-        valves[index].throttle = 0
-        mcu.log.info(f'Closing Valve {index}')
 
 
     def usb_serial_parser(string):
@@ -91,7 +142,7 @@ def main():
         if string.startswith('v'):
             try:
                 index = int(string[1])
-                toggle_valve(index)
+                valves[index].toggle()
 
             except Exception as e:
                 print(e)
@@ -133,47 +184,74 @@ def main():
         except Exception as e:
             mcu.handle_exception(e)
 
+    def display():
+
+        status = ''
+        for v in valves:
+            if v.active:
+                if v.motor.throttle == 1:
+                    s = '1'
+                else:
+                    s = '0'
+            else:
+                s = 'X'
+            status += f'{s} '
+
+        mcu.display.set_cursor(0,0)
+        mcu.display.write(mcu.get_timestamp()[:20])
+        mcu.display.set_cursor(0,1)
+        a = mcu.rtc.alarm[0]
+        mcu.display.write(f'Next Flow: {a.tm_hour:02}:{a.tm_min:02}:{a.tm_sec:02}'[:20])
+        mcu.display.set_cursor(0,2)
+        mcu.display.write(status)
+        mcu.display.set_cursor(0,3)
+        mcu.display.write(f'Burst {valves[0].burst}/{valves[0].num_bursts}')
+
     timer_A = 0
     timer_networking = 0
-    timer_toggle=0
-    valve_active = True
-    set_countdown_alarm(minutes=VALVE_ACTIVE_TIME)
+    set_countdown_alarm(minutes=VALVE_PERIOD)
+    for v in valves:
+        v.set_active()
 
     while True:
         mcu.service(serial_parser=usb_serial_parser)
-        microcontroller.watchdog.feed()
 
-        if time.monotonic() - timer_networking > 1:
-            timer_networking = time.monotonic()
-            mcu.led.value = not mcu.led.value #heartbeat LED
-            timestamp = mcu.get_timestamp()
-            mcu.data['debug'] = timestamp
-            if valve_active and not mcu.wifi.connected:
-                # This prevents trying to reconnect while valve is active/toggling
-                pass
-            else:
-                mcu.aio_sync(mcu.data)
-                parse_feeds()
 
-        # Decide whether valve should be active or not
+        if mcu.rtc.alarm_status:
+            mcu.log.info('RTC Alarm detected')
+            mcu.rtc.alarm_status = False
+
+            for v in valves:
+                v.set_active()
+            mcu.display_text('Valves Active')
+            set_countdown_alarm(minutes=VALVE_PERIOD)
+
+
+        # Update Valves
         if time.monotonic() - timer_A > 1:
-            if mcu.rtc.alarm_status:
-                mcu.log.info('RTC Alarm detected')
-                mcu.rtc.alarm_status = False
+            timer_A = time.monotonic()
+            mcu.led.value = not mcu.led.value #heartbeat LED
+            display()
+            for v in valves:
+                v.update()
 
-                if valve_active:
-                    valve_active = False
-                    for v in valves:
-                        v.throttle = 0
-                    set_countdown_alarm(minutes=VALVE_INACTIVE_TIME)
+        if WIFI:
+            if time.monotonic() - timer_networking > 1:
+                timer_networking = time.monotonic()
+                timestamp = mcu.get_timestamp()
+                mcu.data['debug'] = timestamp
+
+                # This prevents trying to reconnect while valve is active/toggling
+                active = False
+                for v in valves:
+                    if v.active:
+                        active = True
+                if active and not mcu.wifi.connected:
+                    
+                    pass
                 else:
-                    valve_active = True
-                    set_countdown_alarm(minutes=VALVE_ACTIVE_TIME)  
-
-        if valve_active:
-            if time.monotonic() - timer_toggle > TOGGLE_DURATION:
-                timer_toggle = time.monotonic()
-                toggle_valve(0)
+                    mcu.aio_sync(mcu.data)
+                    parse_feeds()
 
 
 if __name__ == "__main__":
@@ -183,7 +261,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print('Code Stopped by Keyboard Interrupt')
         for v in valves:
-            v.throttle = 0
+            v.close()
 
     except Exception as e:
         print(f'Code stopped by unhandled exception:')
