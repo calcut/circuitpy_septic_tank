@@ -2,10 +2,7 @@ from adafruit_motorkit import MotorKit
 from circuitpy_mcu.ota_bootloader import reset, enable_watchdog
 from circuitpy_mcu.mcu import Mcu
 
-import adafruit_pcf8523
 import time
-import busio
-import board
 
 # scheduling and event/error handling libs
 from watchdog import WatchDogTimeout
@@ -19,7 +16,7 @@ NUM_VALVES = 1
 TOGGLE_DURATION = 5 #seconds
 VALVE_INACTIVE_TIME= 1 #minute
 VALVE_ACTIVE_TIME = 1 #minute
-AIO_GROUP = 'boness-dev'
+AIO_GROUP = 'boness-valve'
 LOGLEVEL = logging.DEBUG
 # LOGLEVEL = logging.INFO
 
@@ -33,19 +30,28 @@ def main():
         '0x77' : 'Temp/Humidity/Pressure BME280' # Built into some ESP32S2 feathers 
     }
 
-    mcu = Mcu(offline_mode=True)
-    mcu.log.setLevel(LOGLEVEL)
-    mcu.rtc = adafruit_pcf8523.PCF8523(mcu.i2c)
+    mcu = Mcu(loglevel=LOGLEVEL)
+    mcu.booting = True # A flag to record boot messages
+
+    mcu.attach_rtc_pcf8523()
+
+    # Use SD card
+    if mcu.attach_sdcard():
+        mcu.delete_archive()
+        mcu.archive_file('log.txt')
 
     # Networking Setup
-    group = f'{AIO_GROUP}-{mcu.id}'
-    mcu.wifi_connect(attempts=4, aio_group=group)
+    mcu.wifi.connect()
 
     # Decide how to handle offline periods 
-    mcu.offline_retry_connection =  60 #retry every 60 seconds, default
-    # mcu.offline_retry_connection =  False #Hard reset
+    mcu.wifi.offline_retry_connection =  60 #retry every 60 seconds, default
+    # mcu.wifi.offline_retry_connection =  False #Hard reset
 
-    mcu.aio_setup(group)
+    if mcu.aio_setup(aio_group=f'{AIO_GROUP}-{mcu.id}'):
+        mcu.aio.connect()
+        mcu.aio.subscribe('led-color')
+        mcu.aio.subscribe('active-minutes')
+        mcu.aio.subscribe('inactive-minutes')
 
     try:
         global valves
@@ -56,7 +62,7 @@ def main():
         valves = valves[:NUM_VALVES]
         
     except Exception as e:
-        mcu.log_exception(e)
+        mcu.handle_exception(e)
         mcu.log.warning('valve driver not found')
 
 
@@ -96,14 +102,36 @@ def main():
         # NB setting alarm seconds is not supported by the hardware
         alarm_time = time.struct_time((2000,1,1,hour,minute,0,0,19,-1))
         mcu.rtc.alarm = (alarm_time, repeat)
-        print(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
+        mcu.log.info(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
 
     def set_countdown_alarm(hours=0, minutes=1, repeat="daily"):
         # NB setting alarm seconds is not supported by the hardware
         posix_time = time.mktime(mcu.rtc.datetime)
         alarm_time = time.localtime(posix_time + minutes*60 + hours*60*60)
         mcu.rtc.alarm = (alarm_time, repeat)
-        print(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
+        mcu.log.info(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
+
+    def parse_feeds():
+        try:
+            for feed_id in mcu.aio.updated_feeds.keys():
+                payload = mcu.aio.updated_feeds.pop(feed_id)
+
+                if feed_id == 'active-minutes':
+                    global VALVE_ACTIVE_TIME
+                    VALVE_ACTIVE_TIME = int(payload)
+
+                if feed_id == 'inactive-minutes':
+                    global VALVE_INACTIVE_TIME
+                    VALVE_INACTIVE_TIME = int(payload)
+
+                if feed_id == 'led-color':
+                    mcu.pixel[0] = int(payload[1:], 16)
+
+                if feed_id == 'ota':
+                    mcu.ota_reboot()
+
+        except Exception as e:
+            mcu.handle_exception(e)
 
     timer_A = 0
     timer_networking = 0
@@ -112,31 +140,25 @@ def main():
     set_countdown_alarm(minutes=VALVE_ACTIVE_TIME)
 
     while True:
-        mcu.read_serial(send_to=usb_serial_parser)
+        mcu.service(serial_parser=usb_serial_parser)
         microcontroller.watchdog.feed()
 
-        if time.monotonic() - timer_networking > 5:
+        if time.monotonic() - timer_networking > 1:
             timer_networking = time.monotonic()
-            mcu.aio_sync()
-            # ip = mcu.pool.getaddrinfo(host='adafruit.com', port=443)
-            # print(f'{ip[0][5]=}')
-            # if not mcu.connectivity_check():
-            #     mcu.log.info('reconnecting wifi')
-            #     mcu.wifi_connect(attempts=3, aio_group=group)
-
-            # if mcu.wifi_connected:
-            #     mcu.aio.receive(interval=10)
-            #     mcu.aio.publish_feeds(mcu.data, interval=10, location=None)
-            # else:
-            #     mcu.log.debug('wifi not connected, not publishing')
-            t = mcu.rtc.datetime
-            timestamp = f'{t.tm_year}-{t.tm_mon:02}-{t.tm_mday:02} {t.tm_hour:02}:{t.tm_min:02}:{t.tm_sec:02}'
+            mcu.led.value = not mcu.led.value #heartbeat LED
+            timestamp = mcu.get_timestamp()
             mcu.data['debug'] = timestamp
+            if valve_active and not mcu.wifi.connected:
+                # This prevents trying to reconnect while valve is active/toggling
+                pass
+            else:
+                mcu.aio_sync(mcu.data)
+                parse_feeds()
 
-
+        # Decide whether valve should be active or not
         if time.monotonic() - timer_A > 1:
             if mcu.rtc.alarm_status:
-                print('RTC Alarm detected')
+                mcu.log.info('RTC Alarm detected')
                 mcu.rtc.alarm_status = False
 
                 if valve_active:
