@@ -19,14 +19,16 @@ __repo__ = "https://github.com/calcut/circuitpy-septic-tank"
 valves = []
 NUM_VALVES = 2
 TOGGLE_DURATION = 5 #seconds
-# FLOW_INTERVAL= 0.0333 #(2 minutes) hours until next pulse time
-FLOW_INTERVAL= 0.1 #debug
+FLOW_INTERVAL= 0.0333 #(2 minutes) hours until next pulse time
 VALVE_ACTIVE_DURATION = 1 #minute
 NUM_PULSES = 6
 AIO_GROUP = 'boness-valve'
 # LOGLEVEL = logging.DEBUG
 LOGLEVEL = logging.INFO
 WIFI = True
+
+# If separate motor driver required to close valve
+CLOSING_MOTORS= True
 
 class Valve():
 
@@ -37,19 +39,22 @@ class Valve():
         # For valves that need to be actively closed, add another motor driver
         self.motor_close = None
 
-        self.schedule = True
+        self.manual = False
         self.toggling = False
         self.toggle_duration = TOGGLE_DURATION
-        self.num_pulses = NUM_PULSES
+        # self.num_pulses = NUM_PULSES
         self.timer_toggle = time.monotonic()
         self.pulse = 0
 
-        self.close()
+        self.manual_pos = False #closed
+
         
         # Set up logging
         self.log = logging.getLogger(self.name)
         if loghandler:
             self.log.addHandler(loghandler)
+
+        self.close()
 
     def toggle(self):
         # mcu.log.info(f'Toggling valve {index}')
@@ -73,17 +78,32 @@ class Valve():
         self.log.info(f'Closing Valve')
 
     def update(self):
-        if self.toggling and self.schedule:
-            if self.pulse >= self.num_pulses:
-                self.pulse = 0
-                self.toggling = False
-                self.close()
 
-            elif time.monotonic() - self.timer_toggle > TOGGLE_DURATION:
-                self.timer_toggle = time.monotonic()
-                self.toggle()
+
+        if self.manual:
+            self.toggling = False
+            if self.manual_pos == False:
                 if self.motor.throttle == 1:
-                    self.pulse += 1
+                    self.close()
+            else:
+                if self.motor.throttle == 0:
+                    self.open()
+
+        else: #Auto/Scheduled mode
+            if self.toggling:
+                if self.pulse >= NUM_PULSES:
+                    self.pulse = 0
+                    self.toggling = False
+                    self.close()
+
+                elif time.monotonic() - self.timer_toggle > TOGGLE_DURATION:
+                    self.timer_toggle = time.monotonic()
+                    self.toggle()
+                    if self.motor.throttle == 1:
+                        self.pulse += 1
+            else:
+                if self.motor.throttle == 1:
+                    self.close()
 
 
 def main():
@@ -123,11 +143,18 @@ def main():
             mcu.aio.subscribe('led-color')
             mcu.aio.subscribe('flow-interval')
             mcu.aio.subscribe('next-flow')
+            mcu.aio.subscribe('toggle-duration')
+            mcu.aio.subscribe('pulses')
 
     try:
         global valves
         valve_driver = MotorKit(i2c=mcu.i2c, address=0x78)
-        motors = [valve_driver.motor1, valve_driver.motor2, valve_driver.motor3, valve_driver.motor4]
+
+        if CLOSING_MOTORS:
+            mcu.log.warning('Using "Closing Motors" for double driven valves')
+            motors = [valve_driver.motor1, valve_driver.motor3]
+        else:
+            motors = [valve_driver.motor1, valve_driver.motor2, valve_driver.motor3, valve_driver.motor4]
 
         # Drop any unused valves as defined by the NUM_VALVES parameter
         motors = motors[:NUM_VALVES]
@@ -138,9 +165,14 @@ def main():
             i+=1
             valves.append(Valve(motor=m, name=f'v{i:02}', loghandler=mcu.loghandler))
             if mcu.aio:
-                mcu.aio.subscribe(f"v{i:02}-status")
-                mcu.aio.subscribe(f"v{i:02}-schedule")
-                mcu.aio.subscribe(f"v{i:02}-pulses")
+                mcu.aio.subscribe(f"v{i:02}-mode")
+                mcu.aio.subscribe(f"v{i:02}-manual-pos")
+
+        if CLOSING_MOTORS:
+            valves[0].motor_close = valve_driver.motor2
+            valves[0].close()
+            valves[1].motor_close = valve_driver.motor4
+            valves[1].close()
         
     except Exception as e:
         mcu.handle_exception(e)
@@ -181,8 +213,17 @@ def main():
                 payload = mcu.aio.updated_feeds.pop(feed_id)
                 mcu.log.debug(f"Got MQTT Command {feed_id=}, {payload=}")
 
+                if feed_id == 'toggle-duration':
+                    global TOGGLE_DURATION
+                    TOGGLE_DURATION = float(payload)
+                    mcu.log.info(f'setting {TOGGLE_DURATION=}')
 
-                if feed_id == 'flow-interval':
+                elif feed_id == 'pulses':
+                    global NUM_PULSES
+                    NUM_PULSES = int(payload)
+                    mcu.log.info(f'setting {NUM_PULSES=}')
+
+                elif feed_id == 'flow-interval':
                     global FLOW_INTERVAL
                     FLOW_INTERVAL = float(payload)
                     mcu.log.info(f'setting {FLOW_INTERVAL=}')
@@ -198,28 +239,19 @@ def main():
 
                 elif feed_id[0] == 'v' and feed_id[3] == '-':
                     valve_index = int(feed_id[1:3])
-                    category = feed_id.split('-')[1]
+                    category = feed_id[4:]
 
-                    if category == 'schedule':
+                    if category == 'mode':
                         if payload == 'Auto':
-                            valves[valve_index-1].schedule = True
-                            valves[valve_index-1].close()
+                            valves[valve_index-1].manual = False
                         else:
-                            valves[valve_index-1].schedule = False
-                            valves[valve_index-1].close()
+                            valves[valve_index-1].manual = True
 
-                    elif category == 'status':
-                        if valves[valve_index-1].schedule == False:
-                            if payload == 'Open':
-                                valves[valve_index-1].open()
-                            else:
-                                valves[valve_index-1].close()
+                    elif category == 'manual-pos':
+                        if payload == 'Open':
+                            valves[valve_index-1].manual_pos = True
                         else:
-                            mcu.log.warning('Ignoring valve command, in schedule mode')
-
-                    elif category == 'pulses':
-                        valves[valve_index-1].num_pulses = int(payload)
-                        mcu.log.info(f'setting {valves[valve_index-1].num_pulses=}')
+                            valves[valve_index-1].manual_pos = False
 
 
                 elif feed_id == 'led-color':
@@ -249,7 +281,14 @@ def main():
         mcu.display.set_cursor(0,2)
         mcu.display.write(status)
         mcu.display.set_cursor(0,3)
-        mcu.display.write(f'Pulse {valves[0].pulse}/{valves[0].num_pulses}')
+        mcu.display.write(f'Pulse {valves[0].pulse}/{NUM_PULSES}')
+
+        try:
+            if status != mcu.valve_status:
+                mcu.log.warning(f'Valves: {status} Pulse {valves[0].pulse}/{NUM_PULSES}' )
+        except AttributeError:
+            pass
+        mcu.valve_status = status
 
     timer_A = 0
     timer_networking = 0
@@ -285,20 +324,17 @@ def main():
                 timer_networking = time.monotonic()
                 timestamp = mcu.get_timestamp()
                 mcu.data['debug'] = timestamp
-                # a = mcu.rtc.alarm[0]
-                # mcu.data['next-flow'] = (f'{a.tm_hour:02}:{a.tm_min:02}')
 
-                # This prevents trying to reconnect while valve is active/toggling
                 active = False
                 for v in valves:
                     if v.toggling:
                         active = True
+                # This prevents trying to reconnect while valve is active/toggling
                 if active and not mcu.wifi.connected:
                     pass
                 else:
                     mcu.aio_sync(mcu.data, publish_interval=10)
                     parse_feeds()
-
 
 if __name__ == "__main__":
     try:
