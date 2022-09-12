@@ -27,7 +27,7 @@ NUM_PULSES = 6
 AIO_GROUP = 'boness-valve'
 # LOGLEVEL = logging.DEBUG
 LOGLEVEL = logging.INFO
-WIFI = False
+WIFI = True
 
 # If separate motor driver required to close valve
 CLOSING_MOTORS= True
@@ -103,6 +103,7 @@ class Valve():
         self.motor.throttle = 1
         self.log.info(f'Opening Valve')
         self.timer_open = time.monotonic()
+        self.closing = False
         if self.gpio_open:
             self.opening = True
 
@@ -113,6 +114,7 @@ class Valve():
             self.motor_close.throttle = 1
         self.log.info(f'Closing Valve')
         self.timer_close = time.monotonic()
+        self.opening = False
         if self.gpio_close:
             self.closing = True
 
@@ -149,7 +151,7 @@ class Valve():
 
         else: #Auto/Scheduled mode
             if self.pulsing:
-                if self.pulse >= NUM_PULSES:
+                if self.pulse > NUM_PULSES:
                     self.pulse = 0
                     self.pulsing = False
                     self.close()
@@ -332,10 +334,10 @@ def main():
 
             if v.blocked:
                 s = '*'
-            elif v.closing == True:
-                s = 'C'
-            elif v.opening == True:
-                s = 'O'
+            # elif v.closing == True:
+            #     s = 'C'
+            # elif v.opening == True:
+            #     s = 'O'
             elif v.motor.throttle == 1:
                 s = '1'
             else:
