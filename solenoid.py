@@ -103,7 +103,8 @@ class Valve():
         self.motor.throttle = 1
         self.log.info(f'Opening Valve')
         self.timer_open = time.monotonic()
-        self.opening = True
+        if self.gpio_open:
+            self.opening = True
 
     def close(self):
         self.motor.throttle = 0
@@ -112,11 +113,12 @@ class Valve():
             self.motor_close.throttle = 1
         self.log.info(f'Closing Valve')
         self.timer_close = time.monotonic()
-        self.closing = True
+        if self.gpio_close:
+            self.closing = True
 
     def update(self):
 
-        if self.closing and self.gpio_close:
+        if self.closing:
             if time.monotonic() - self.timer_close > 10:
                 self.log.critical('Valve not closed after 10s, possible blockage')
                 self.closing = False
@@ -126,7 +128,7 @@ class Valve():
                 self.blocked = False
                 self.log.info(f'closed in {round(time.monotonic() - self.timer_close, 1)}s')
 
-        if self.opening and self.gpio_open:
+        if self.opening:
             if time.monotonic() - self.timer_open > 10:
                 self.log.critical('Valve not Opened after 10s, possible blockage')
                 self.opening = False
@@ -327,7 +329,14 @@ def main():
 
         status = ''
         for v in valves:
-            if v.motor.throttle == 1:
+
+            if v.blocked:
+                s = '*'
+            elif v.closing == True:
+                s = 'C'
+            elif v.opening == True:
+                s = 'O'
+            elif v.motor.throttle == 1:
                 s = '1'
             else:
                 s = '0'
