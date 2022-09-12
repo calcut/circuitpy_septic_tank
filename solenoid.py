@@ -3,6 +3,9 @@ from adafruit_motor.motor import DCMotor
 from circuitpy_mcu.ota_bootloader import reset, enable_watchdog
 from circuitpy_mcu.mcu import Mcu
 
+import board
+import digitalio
+
 import time
 
 # scheduling and event/error handling libs
@@ -47,13 +50,38 @@ class Valve():
 
         self.manual_pos = False #closed
 
-        
+        self.gpio_open = None
+        self.gpio_close = None
+
         # Set up logging
         self.log = logging.getLogger(self.name)
         if loghandler:
             self.log.addHandler(loghandler)
 
         self.close()
+
+    def setup_position_signals(self, pin_open=None, pin_close=None):
+        if pin_open:
+            self.gpio_open = digitalio.DigitalInOut(pin_open)
+            self.gpio_open.switch_to_input(pull=digitalio.Pull.UP)
+
+        if pin_close:
+            self.gpio_close = digitalio.DigitalInOut(pin_close)
+            self.gpio_close.switch_to_input(pull=digitalio.Pull.UP)
+
+    def check_position(self):
+        if self.motor.throttle == 1 and self.gpio_open is not None:
+            if self.gpio_open.value == False:
+                self.log.info('fully open')
+                return True
+
+        if self.motor.throttle == 0 and self.gpio_close is not None:
+            if self.gpio_close.value == False:
+                self.log.info('fully closed')
+                return True
+
+        self.log.warning('position check failed')
+        return False
 
     def toggle(self):
         # mcu.log.info(f'Toggling valve {index}')
@@ -77,7 +105,6 @@ class Valve():
         self.log.info(f'Closing Valve')
 
     def update(self):
-
 
         if self.manual:
             self.toggling = False
@@ -170,6 +197,7 @@ def main():
         if CLOSING_MOTORS:
             valves[0].motor_close = valve_driver.motor2
             valves[0].close()
+            valves[0].setup_position_signals(pin_open=board.D9, pin_close=board.D11)
             valves[1].motor_close = valve_driver.motor4
             valves[1].close()
         
@@ -184,7 +212,8 @@ def main():
         if string.startswith('v'):
             try:
                 index = int(string[1])
-                valves[index].toggle()
+                valves[index].manual_pos = not valves[index].manual_pos
+                valves[index].manual = True
 
             except Exception as e:
                 print(e)
@@ -320,6 +349,8 @@ def main():
             timer_A = time.monotonic()
             mcu.led.value = not mcu.led.value #heartbeat LED
             display()
+            valves[0].check_position()
+
 
         if WIFI:
             if time.monotonic() - timer_networking > 1:
