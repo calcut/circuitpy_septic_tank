@@ -10,33 +10,42 @@ from watchdog import WatchDogTimeout
 import microcontroller
 import adafruit_logging as logging
 
+__version__ = "2.0.0.rc1"
+__filename__ = "simpletest.py"
+__repo__ = "https://github.com/calcut/circuitpy-septic-tank"
+
 
 # global variable so valves can be shut down after keyboard interrupt
 valves = []
-NUM_VALVES = 4
+NUM_VALVES = 2
 TOGGLE_DURATION = 5 #seconds
-VALVE_PERIOD= 2 #minutes until next active time
+# FLOW_INTERVAL= 0.0333 #(2 minutes) hours until next pulse time
+FLOW_INTERVAL= 0.1 #debug
 VALVE_ACTIVE_DURATION = 1 #minute
-NUM_BURSTS = 6
+NUM_PULSES = 6
 AIO_GROUP = 'boness-valve'
 # LOGLEVEL = logging.DEBUG
 LOGLEVEL = logging.INFO
-WIFI = False
+WIFI = True
 
 class Valve():
 
     def __init__(self, motor:DCMotor, name, loghandler=None):
         self.motor = motor
-        self.motor.throttle = 0
         self.name = name
 
-        self.active = False
-        self.toggle_duration = TOGGLE_DURATION
-        self.num_bursts = NUM_BURSTS
-        self.timer_toggle = time.monotonic()
-        self.timer_active = time.monotonic()
-        self.burst = 0
+        # For valves that need to be actively closed, add another motor driver
+        self.motor_close = None
 
+        self.schedule = True
+        self.toggling = False
+        self.toggle_duration = TOGGLE_DURATION
+        self.num_pulses = NUM_PULSES
+        self.timer_toggle = time.monotonic()
+        self.pulse = 0
+
+        self.close()
+        
         # Set up logging
         self.log = logging.getLogger(self.name)
         if loghandler:
@@ -50,34 +59,31 @@ class Valve():
             self.open()
 
     def open(self):
+        if self.motor_close:
+            self.motor_close.throttle = 0
+            time.sleep(0.1)
         self.motor.throttle = 1
         self.log.info(f'Opening Valve')
 
     def close(self):
         self.motor.throttle = 0
+        if self.motor_close:
+            time.sleep(0.1)
+            self.motor_close.throttle = 1
         self.log.info(f'Closing Valve')
 
-    def display(self, message):
-        # Special log command with custom level, to request sending to attached display
-        self.log.log(level=25, msg=message)
-
-    def set_active(self):
-        self.active = True
-        self.timer_active = time.monotonic()
-
     def update(self):
-        if self.active:
-            if self.burst >= self.num_bursts:
-                self.burst = 0
-                self.active = False
+        if self.toggling and self.schedule:
+            if self.pulse >= self.num_pulses:
+                self.pulse = 0
+                self.toggling = False
                 self.close()
 
             elif time.monotonic() - self.timer_toggle > TOGGLE_DURATION:
                 self.timer_toggle = time.monotonic()
                 self.toggle()
                 if self.motor.throttle == 1:
-                    self.burst += 1
-
+                    self.pulse += 1
 
 
 def main():
@@ -92,6 +98,8 @@ def main():
 
     mcu = Mcu(loglevel=LOGLEVEL)
     mcu.booting = True # A flag to record boot messages
+    mcu.log.info(f'STARTING {__filename__} {__version__}')
+
 
     mcu.attach_rtc_pcf8523()
 
@@ -112,10 +120,9 @@ def main():
         # mcu.wifi.offline_retry_connection =  False #Hard reset
 
         if mcu.aio_setup(aio_group=f'{AIO_GROUP}-{mcu.id}'):
-            mcu.aio.connect()
             mcu.aio.subscribe('led-color')
-            mcu.aio.subscribe('active-minutes')
-            mcu.aio.subscribe('inactive-minutes')
+            mcu.aio.subscribe('flow-interval')
+            mcu.aio.subscribe('next-flow')
 
     try:
         global valves
@@ -129,7 +136,11 @@ def main():
         i=0
         for m in motors:
             i+=1
-            valves.append(Valve(motor=m, name=f'V{i}', loghandler=mcu.loghandler))
+            valves.append(Valve(motor=m, name=f'v{i:02}', loghandler=mcu.loghandler))
+            if mcu.aio:
+                mcu.aio.subscribe(f"v{i:02}-status")
+                mcu.aio.subscribe(f"v{i:02}-schedule")
+                mcu.aio.subscribe(f"v{i:02}-pulses")
         
     except Exception as e:
         mcu.handle_exception(e)
@@ -151,34 +162,70 @@ def main():
 
     def set_alarm(hour=0, minute=1, repeat="daily"):
         # NB setting alarm seconds is not supported by the hardware
-        alarm_time = time.struct_time((2000,1,1,hour,minute,0,0,19,-1))
+        alarm_time = time.struct_time((2000,1,1,hour,minute,0,0,1,-1))
         mcu.rtc.alarm = (alarm_time, repeat)
-        mcu.log.info(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
+        mcu.log.warning(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
+        mcu.aio.publish(feed_key='next-flow', data=f'{alarm_time.tm_hour:02}:{alarm_time.tm_min:02}')
 
-    def set_countdown_alarm(hours=0, minutes=1, repeat="daily"):
+    def set_countdown_alarm(hours=0, minutes=0, repeat="daily"):
         # NB setting alarm seconds is not supported by the hardware
         posix_time = time.mktime(mcu.rtc.datetime)
-        alarm_time = time.localtime(posix_time + minutes*60 + hours*60*60)
+        alarm_time = time.localtime(posix_time + int(minutes*60) + int(hours*60*60))
         mcu.rtc.alarm = (alarm_time, repeat)
-        mcu.log.info(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
+        mcu.log.warning(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
+        mcu.aio.publish(feed_key='next-flow', data=f'{alarm_time.tm_hour:02}:{alarm_time.tm_min:02}')
 
     def parse_feeds():
         try:
             for feed_id in mcu.aio.updated_feeds.keys():
                 payload = mcu.aio.updated_feeds.pop(feed_id)
+                mcu.log.debug(f"Got MQTT Command {feed_id=}, {payload=}")
 
-                if feed_id == 'active-minutes':
-                    global VALVE_ACTIVE_TIME
-                    VALVE_ACTIVE_TIME = int(payload)
 
-                if feed_id == 'inactive-minutes':
-                    global VALVE_INACTIVE_TIME
-                    VALVE_INACTIVE_TIME = int(payload)
+                if feed_id == 'flow-interval':
+                    global FLOW_INTERVAL
+                    FLOW_INTERVAL = float(payload)
+                    mcu.log.info(f'setting {FLOW_INTERVAL=}')
+                    set_countdown_alarm(hours=FLOW_INTERVAL)
 
-                if feed_id == 'led-color':
+                elif feed_id == 'next-flow':
+                    if payload[-1] == '*':
+                        nf = payload[:-1].split(':')
+                        if len(nf) == 2:
+                            set_alarm(hour=int(nf[0]), minute=int(nf[1]))
+                        else:
+                            mcu.log.error(f"Couldn't parse next-flow {payload}")
+
+                elif feed_id[0] == 'v' and feed_id[3] == '-':
+                    valve_index = int(feed_id[1:3])
+                    category = feed_id.split('-')[1]
+
+                    if category == 'schedule':
+                        if payload == 'Auto':
+                            valves[valve_index-1].schedule = True
+                            valves[valve_index-1].close()
+                        else:
+                            valves[valve_index-1].schedule = False
+                            valves[valve_index-1].close()
+
+                    elif category == 'status':
+                        if valves[valve_index-1].schedule == False:
+                            if payload == 'Open':
+                                valves[valve_index-1].open()
+                            else:
+                                valves[valve_index-1].close()
+                        else:
+                            mcu.log.warning('Ignoring valve command, in schedule mode')
+
+                    elif category == 'pulses':
+                        valves[valve_index-1].num_pulses = int(payload)
+                        mcu.log.info(f'setting {valves[valve_index-1].num_pulses=}')
+
+
+                elif feed_id == 'led-color':
                     mcu.pixel[0] = int(payload[1:], 16)
 
-                if feed_id == 'ota':
+                elif feed_id == 'ota':
                     mcu.ota_reboot()
 
         except Exception as e:
@@ -188,13 +235,10 @@ def main():
 
         status = ''
         for v in valves:
-            if v.active:
-                if v.motor.throttle == 1:
-                    s = '1'
-                else:
-                    s = '0'
+            if v.motor.throttle == 1:
+                s = '1'
             else:
-                s = 'X'
+                s = '0'
             status += f'{s} '
 
         mcu.display.set_cursor(0,0)
@@ -205,52 +249,54 @@ def main():
         mcu.display.set_cursor(0,2)
         mcu.display.write(status)
         mcu.display.set_cursor(0,3)
-        mcu.display.write(f'Burst {valves[0].burst}/{valves[0].num_bursts}')
+        mcu.display.write(f'Pulse {valves[0].pulse}/{valves[0].num_pulses}')
 
     timer_A = 0
     timer_networking = 0
-    set_countdown_alarm(minutes=VALVE_PERIOD)
-    for v in valves:
-        v.set_active()
+
+    if mcu.aio is None:
+        set_countdown_alarm(hours=FLOW_INTERVAL)
+
+    mcu.booting = False # Stop accumulating boot log messages
+    if mcu.aio is not None:
+        mcu.aio.publish_long('log', mcu.logdata) # Send the boot log
+
 
     while True:
         mcu.service(serial_parser=usb_serial_parser)
-
+        for v in valves:
+            v.update()
 
         if mcu.rtc.alarm_status:
-            mcu.log.info('RTC Alarm detected')
+            mcu.log.warning('RTC Alarm: Flow Starting')
             mcu.rtc.alarm_status = False
 
             for v in valves:
-                v.set_active()
-            mcu.display_text('Valves Active')
-            set_countdown_alarm(minutes=VALVE_PERIOD)
+                v.toggling = True
+            set_countdown_alarm(hours=FLOW_INTERVAL)
 
-
-        # Update Valves
         if time.monotonic() - timer_A > 1:
             timer_A = time.monotonic()
             mcu.led.value = not mcu.led.value #heartbeat LED
             display()
-            for v in valves:
-                v.update()
 
         if WIFI:
             if time.monotonic() - timer_networking > 1:
                 timer_networking = time.monotonic()
                 timestamp = mcu.get_timestamp()
                 mcu.data['debug'] = timestamp
+                # a = mcu.rtc.alarm[0]
+                # mcu.data['next-flow'] = (f'{a.tm_hour:02}:{a.tm_min:02}')
 
                 # This prevents trying to reconnect while valve is active/toggling
                 active = False
                 for v in valves:
-                    if v.active:
+                    if v.toggling:
                         active = True
                 if active and not mcu.wifi.connected:
-                    
                     pass
                 else:
-                    mcu.aio_sync(mcu.data)
+                    mcu.aio_sync(mcu.data, publish_interval=10)
                     parse_feeds()
 
 
