@@ -19,13 +19,12 @@ __repo__ = "https://github.com/calcut/circuitpy-septic-tank"
 valves = []
 NUM_VALVES = 2
 TOGGLE_DURATION = 5 #seconds
-FLOW_INTERVAL= 0.0333 #(2 minutes) hours until next pulse time
-VALVE_ACTIVE_DURATION = 1 #minute
+FLOW_INTERVAL= 6 #(0.0333= 2 minutes) hours until next pulse time
 NUM_PULSES = 6
 AIO_GROUP = 'boness-valve'
 # LOGLEVEL = logging.DEBUG
 LOGLEVEL = logging.INFO
-WIFI = True
+WIFI = False
 
 # If separate motor driver required to close valve
 CLOSING_MOTORS= True
@@ -197,7 +196,8 @@ def main():
         alarm_time = time.struct_time((2000,1,1,hour,minute,0,0,1,-1))
         mcu.rtc.alarm = (alarm_time, repeat)
         mcu.log.warning(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
-        mcu.aio.publish(feed_key='next-flow', data=f'{alarm_time.tm_hour:02}:{alarm_time.tm_min:02}')
+        if mcu.aio:
+            mcu.aio.publish(feed_key='next-flow', data=f'{alarm_time.tm_hour:02}:{alarm_time.tm_min:02}')
 
     def set_countdown_alarm(hours=0, minutes=0, repeat="daily"):
         # NB setting alarm seconds is not supported by the hardware
@@ -205,7 +205,8 @@ def main():
         alarm_time = time.localtime(posix_time + int(minutes*60) + int(hours*60*60))
         mcu.rtc.alarm = (alarm_time, repeat)
         mcu.log.warning(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
-        mcu.aio.publish(feed_key='next-flow', data=f'{alarm_time.tm_hour:02}:{alarm_time.tm_min:02}')
+        if mcu.aio:
+            mcu.aio.publish(feed_key='next-flow', data=f'{alarm_time.tm_hour:02}:{alarm_time.tm_min:02}')
 
     def parse_feeds():
         try:
@@ -294,7 +295,8 @@ def main():
     timer_networking = 0
 
     if mcu.aio is None:
-        set_countdown_alarm(hours=FLOW_INTERVAL)
+        # set_countdown_alarm(hours=FLOW_INTERVAL)
+        set_alarm(hour=9, minute=0)
 
     mcu.booting = False # Stop accumulating boot log messages
     if mcu.aio is not None:
