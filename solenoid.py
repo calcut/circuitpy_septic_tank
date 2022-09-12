@@ -42,7 +42,7 @@ class Valve():
         self.motor_close = None
 
         self.manual = False
-        self.toggling = False
+        self.pulsing = False
         self.toggle_duration = TOGGLE_DURATION
         # self.num_pulses = NUM_PULSES
         self.timer_toggle = time.monotonic()
@@ -52,6 +52,12 @@ class Valve():
 
         self.gpio_open = None
         self.gpio_close = None
+
+        self.timer_close = 0
+        self.timer_open = 0
+        self.opening = False
+        self.closing = False
+        self.blocked = False
 
         # Set up logging
         self.log = logging.getLogger(self.name)
@@ -80,7 +86,7 @@ class Valve():
                 self.log.info('fully closed')
                 return True
 
-        self.log.warning('position check failed')
+        self.log.info('position check failed')
         return False
 
     def toggle(self):
@@ -96,6 +102,8 @@ class Valve():
             time.sleep(0.1)
         self.motor.throttle = 1
         self.log.info(f'Opening Valve')
+        self.timer_open = time.monotonic()
+        self.opening = True
 
     def close(self):
         self.motor.throttle = 0
@@ -103,11 +111,33 @@ class Valve():
             time.sleep(0.1)
             self.motor_close.throttle = 1
         self.log.info(f'Closing Valve')
+        self.timer_close = time.monotonic()
+        self.closing = True
 
     def update(self):
 
+        if self.closing and self.gpio_close:
+            if time.monotonic() - self.timer_close > 10:
+                self.log.critical('Valve not closed after 10s, possible blockage')
+                self.closing = False
+                self.blocked = True
+            if self.gpio_close.value == False:
+                self.closing = False
+                self.blocked = False
+                self.log.info(f'closed in {round(time.monotonic() - self.timer_close, 1)}s')
+
+        if self.opening and self.gpio_open:
+            if time.monotonic() - self.timer_open > 10:
+                self.log.critical('Valve not Opened after 10s, possible blockage')
+                self.opening = False
+                self.blocked = True
+            if self.gpio_open.value == False:
+                self.opening = False
+                self.blocked = False
+                self.log.info(f'opened in {round(time.monotonic() - self.timer_open, 1)}s')
+
         if self.manual:
-            self.toggling = False
+            self.pulsing = False
             if self.manual_pos == False:
                 if self.motor.throttle == 1:
                     self.close()
@@ -116,10 +146,10 @@ class Valve():
                     self.open()
 
         else: #Auto/Scheduled mode
-            if self.toggling:
+            if self.pulsing:
                 if self.pulse >= NUM_PULSES:
                     self.pulse = 0
-                    self.toggling = False
+                    self.pulsing = False
                     self.close()
 
                 elif time.monotonic() - self.timer_toggle > TOGGLE_DURATION:
@@ -342,14 +372,13 @@ def main():
             mcu.rtc.alarm_status = False
 
             for v in valves:
-                v.toggling = True
+                v.pulsing = True
             set_countdown_alarm(hours=FLOW_INTERVAL)
 
         if time.monotonic() - timer_A > 1:
             timer_A = time.monotonic()
             mcu.led.value = not mcu.led.value #heartbeat LED
             display()
-            valves[0].check_position()
 
 
         if WIFI:
@@ -360,7 +389,7 @@ def main():
 
                 active = False
                 for v in valves:
-                    if v.toggling:
+                    if v.pulsing:
                         active = True
                 # This prevents trying to reconnect while valve is active/toggling
                 if active and not mcu.wifi.connected:
