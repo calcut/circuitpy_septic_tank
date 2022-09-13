@@ -231,7 +231,7 @@ def main():
         if CLOSING_MOTORS:
             valves[0].motor_close = valve_driver.motor2
             valves[0].close()
-            valves[0].setup_position_signals(pin_open=board.D9, pin_close=board.D11)
+            # valves[0].setup_position_signals(pin_open=board.D9, pin_close=board.D11)
             valves[1].motor_close = valve_driver.motor4
             valves[1].close()
         
@@ -291,7 +291,6 @@ def main():
                     global FLOW_INTERVAL
                     FLOW_INTERVAL = float(payload)
                     mcu.log.info(f'setting {FLOW_INTERVAL=}')
-                    set_countdown_alarm(hours=FLOW_INTERVAL)
 
                 elif feed_id == 'next-flow':
                     if payload[-1] == '*':
