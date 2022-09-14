@@ -152,16 +152,17 @@ class Valve():
 
         else: #Auto/Scheduled mode
             if self.pulsing:
-                if self.pulse > NUM_PULSES:
-                    self.pulse = 0
-                    self.pulsing = False
-                    self.close()
-
-                elif time.monotonic() - self.timer_toggle > TOGGLE_DURATION:
+                if time.monotonic() - self.timer_toggle > TOGGLE_DURATION:
                     self.timer_toggle = time.monotonic()
-                    self.toggle()
-                    if self.motor.throttle == 1:
-                        self.pulse += 1
+                    
+                    if self.pulse >= NUM_PULSES:
+                        self.pulse = 0
+                        self.pulsing = False
+                        self.close()
+                    else: 
+                        self.toggle()
+                        if self.motor.throttle == 1:
+                            self.pulse += 1
             else:
                 if self.motor.throttle == 1:
                     self.close()
