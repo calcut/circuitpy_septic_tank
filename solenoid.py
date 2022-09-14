@@ -247,7 +247,7 @@ def main():
         if CLOSING_MOTORS:
             valves[0].motor_close = valve_driver.motor2
             valves[0].close()
-            # valves[0].setup_position_signals(pin_open=board.D9, pin_close=board.D11)
+            valves[0].setup_position_signals(pin_open=board.D9, pin_close=board.D11)
             valves[1].motor_close = valve_driver.motor4
             valves[1].close()
         
