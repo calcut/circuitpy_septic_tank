@@ -2,6 +2,7 @@ from adafruit_motorkit import MotorKit
 from adafruit_motor.motor import DCMotor
 from circuitpy_mcu.ota_bootloader import reset, enable_watchdog
 from circuitpy_mcu.mcu import Mcu
+import supervisor
 
 import board
 import digitalio
@@ -188,7 +189,9 @@ def main():
 
     # Use SD card
     if mcu.attach_sdcard():
-        mcu.delete_archive()
+        if supervisor.runtime.usb_connected:
+            print('USB connected, deleting archive files')
+            mcu.delete_archive()
         mcu.archive_file('log.txt')
 
     if WIFI:
