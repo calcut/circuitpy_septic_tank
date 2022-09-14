@@ -199,12 +199,13 @@ def main():
     wifi = True
     wifi_switch = digitalio.DigitalInOut(board.A5)
     wifi_switch.switch_to_input(digitalio.Pull.UP)
-    if wifi_switch.value == True:
-        mcu.log.warning('wifi_switch board.A5 pulled up, disabling wifi')
-        wifi = False
 
     if FORCE_WIFI:
         wifi = True
+
+    elif wifi_switch.value == True:
+        mcu.log.warning('wifi_switch board.A5 pulled up, disabling wifi')
+        wifi = False
 
     if wifi:
         # Networking Setup
@@ -308,10 +309,15 @@ def main():
                     mcu.log.info(f'setting {FLOW_INTERVAL=}')
 
                 elif feed_id == 'next-flow':
-                    if payload[-1] == '*':
-                        nf = payload[:-1].split(':')
+                        nf = payload.split(':')
                         if len(nf) == 2:
-                            set_alarm(hour=int(nf[0]), minute=int(nf[1]))
+                            hour = int(nf[0])
+                            minute = int(nf[1])
+                            a = mcu.rtc.alarm[0]
+
+                            # only update if there is a change
+                            if (hour != a.tm_hour) or (minute != a.tm_min):
+                                set_alarm(hour, minute)
                         else:
                             mcu.log.error(f"Couldn't parse next-flow {payload}")
 
