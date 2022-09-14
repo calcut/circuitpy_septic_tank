@@ -28,7 +28,7 @@ NUM_PULSES = 6
 AIO_GROUP = 'boness-valve'
 # LOGLEVEL = logging.DEBUG
 LOGLEVEL = logging.INFO
-WIFI = True
+FORCE_WIFI = False
 
 # If separate motor driver required to close valve
 CLOSING_MOTORS= True
@@ -196,13 +196,17 @@ def main():
         mcu.archive_file('log.txt')
 
 
+    wifi = True
     wifi_switch = digitalio.DigitalInOut(board.A5)
     wifi_switch.switch_to_input(digitalio.Pull.UP)
     if wifi_switch.value == True:
         mcu.log.warning('wifi_switch board.A5 pulled up, disabling wifi')
-        WIFI = False
+        wifi = False
 
-    if WIFI:
+    if FORCE_WIFI:
+        wifi = True
+
+    if wifi:
         # Networking Setup
         mcu.wifi.connect()
 
@@ -402,7 +406,7 @@ def main():
             display()
 
 
-        if WIFI:
+        if wifi:
             if time.monotonic() - timer_networking > 1:
                 timer_networking = time.monotonic()
                 timestamp = mcu.get_timestamp()
