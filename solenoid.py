@@ -195,6 +195,13 @@ def main():
             mcu.delete_archive()
         mcu.archive_file('log.txt')
 
+
+    wifi_switch = digitalio.DigitalInOut(board.A5)
+    wifi_switch.switch_to_input(digitalio.Pull.UP)
+    if wifi_switch.value == True:
+        mcu.log.warning('wifi_switch board.A5 pulled up, disabling wifi')
+        WIFI = False
+
     if WIFI:
         # Networking Setup
         mcu.wifi.connect()
