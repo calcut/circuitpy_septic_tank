@@ -71,12 +71,9 @@ def main():
     timer_sd = 0
 
     # instantiate the MCU helper class to set up the system
-    mcu = Mcu()
+    mcu = Mcu(loglevel=LOGLEVEL)
     mcu.booting = True # A flag to record boot messages
     mcu.log.info(f'STARTING {__filename__} {__version__}')
-
-    # Choose minimum logging level to process
-    mcu.log.setLevel(LOGLEVEL)
 
     # Check what devices are present on the i2c bus
     mcu.i2c_identify(i2c_dict)
@@ -88,7 +85,7 @@ def main():
         time.sleep(1)
         mcu.log.info(f'found Display')
     except Exception as e:
-        mcu.log_exception(e)
+        mcu.handle_exception(e)
         display = None
 
         
@@ -99,22 +96,26 @@ def main():
     mcu.archive_file('data.txt')
     mcu.watchdog_feed()
 
-    if AIO:
-        mcu.wifi_connect()
-        group = f'{AIO_GROUP}-{mcu.id}'
-        if display:
-            display.show_text(f'AIO: {group}')
-        aio = Aio_http(mcu.requests, group, mcu.loghandler)
-        aio.log.setLevel(LOGLEVEL)
-        mcu.loghandler.aio = aio
-        if display:
-            display.show_text('Subscribing to feeds')
-        aio.subscribe('pump1-speed')
-        aio.subscribe('pump2-speed')
-        aio.subscribe('pump3-speed')
-        pump_speeds[0] = float(aio.subscribed_feeds['pump1-speed']['last_value'])
-        pump_speeds[1] = float(aio.subscribed_feeds['pump2-speed']['last_value'])
-        pump_speeds[2] = float(aio.subscribed_feeds['pump3-speed']['last_value'])
+
+    # Networking Setup
+    mcu.wifi.connect()
+    if mcu.aio_setup(aio_group=f'{AIO_GROUP}-{mcu.id}'):
+        mcu.aio.connect()
+        mcu.display_text('Subscribing to feeds')
+        mcu.aio.subscribe('pump1-speed')
+        mcu.aio.subscribe('pump2-speed')
+        mcu.aio.subscribe('pump3-speed')
+
+        # mcu.wifi_connect()
+        # group = f'{AIO_GROUP}-{mcu.id}'
+        # if display:
+            # display.show_text(f'AIO: {group}')
+        # aio = Aio_http(mcu.requests, group, mcu.loghandler)
+        # aio.log.setLevel(LOGLEVEL)
+        # mcu.loghandler.aio = aio
+        # pump_speeds[0] = float(aio.subscribed_feeds['pump1-speed']['last_value'])
+        # pump_speeds[1] = float(aio.subscribed_feeds['pump2-speed']['last_value'])
+        # pump_speeds[2] = float(aio.subscribed_feeds['pump3-speed']['last_value'])
 
     def connect_thermocouple_channels():
         tc_addresses = [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67]
@@ -149,7 +150,7 @@ def main():
                 ph_channels.append(ph_channel)
 
         except Exception as e:
-            mcu.log_exception(e)
+            mcu.handle_exception(e)
             mcu.log.info('ADC for pH probes not found')
 
         return ph_channels
@@ -165,7 +166,7 @@ def main():
             pumps = pumps[:NUM_PUMPS]
             
         except Exception as e:
-            mcu.log_exception(e)
+            mcu.handle_exception(e)
             mcu.log.warning('Pump driver not found')
         
         return pumps
@@ -188,7 +189,7 @@ def main():
         #     gc = None 
 
         except Exception as e:
-            mcu.log_exception(e)
+            mcu.handle_exception(e)
             mcu.log.warning('Gascard not found')
             raise
 
@@ -231,9 +232,9 @@ def main():
 
 
     def parse_feeds():
-        if AIO:
-            for feed_id in aio.updated_feeds.keys():
-                payload = aio.updated_feeds.pop(feed_id)
+        if mcu.aio is not None:
+            for feed_id in mcu.aio.updated_feeds.keys():
+                payload = mcu.aio.updated_feeds.pop(feed_id)
 
                 if feed_id == 'led-color':
                     r = int(payload[1:3], 16)
@@ -251,25 +252,21 @@ def main():
                 if feed_id == 'ota':
                     mcu.ota_reboot()
 
-    def publish_feeds(interval):
-        # AIO limits to 30 data points per minute and 10 feeds in the free version
-        if AIO and len(mcu.data) > 0:
+    # def publish_feeds(interval):
+    #     # AIO limits to 30 data points per minute and 10 feeds in the free version
+    #     if AIO and len(mcu.data) > 0:
 
-            # Optionally filter e.g. to get <10 feeds
-            # data = filter_data('TC', decimal_places=3)
-            data = mcu.data
+    #         # Optionally filter e.g. to get <10 feeds
+    #         # data = filter_data('TC', decimal_places=3)
+    #         data = mcu.data
 
-            # location = "57.2445673, -4.3978963, 220" #Gorthleck, as an example
+    #         # location = "57.2445673, -4.3978963, 220" #Gorthleck, as an example
 
-            #This will automatically limit its rate to not get throttled by AIO
-            success = aio.publish_feeds(data, interval=interval, location=None)
+    #         #This will automatically limit its rate to not get throttled by AIO
+    #         success = aio.publish_feeds(data, interval=interval, location=None)
 
-            if success:
-                # don't keep transmitting this until next updated.
-                for p in range(len(pumps)):
-                    if f'gc{p+1}' in mcu.data:
-                        del mcu.data[f'gc{p+1}'] # Simplified for one channel
-                        mcu.log.info(f'deleted datapoint gc{p+1}')
+    #         if success:
+
 
 
     def log_sdcard(interval=30):
@@ -505,17 +502,25 @@ def main():
     if display:
         display.clear()
     mcu.booting = False # Stop accumulating boot log messages
-    aio.publish_long('log', mcu.logdata) # Send the boot log
+    if mcu.aio is not None:
+        mcu.aio.publish_long('log', mcu.logdata) # Send the boot log
 
     while True:
         mcu.watchdog_feed()
         mcu.read_serial(send_to=usb_serial_parser)
 
         capture_data(interval=1)
-        publish_feeds(interval=30)
+        # publish_feeds(interval=30)
         log_sdcard(interval=30)
-        if aio.receive(interval=10) > 0:
-            parse_feeds()
+        success = mcu.aio_sync(mcu.data, publish_interval=30)
+
+        # don't keep transmitting this until next updated.
+        # TODO, this is probably broken!! we don't know if gc has been successfully sent
+        for p in range(len(pumps)):
+            if f'gc{p+1}' in mcu.data:
+                del mcu.data[f'gc{p+1}'] # Simplified for one channel
+                mcu.log.info(f'deleted datapoint gc{p+1}')
+        parse_feeds()
 
         # Check for incoming serial messages from Gascard
         if gc:
