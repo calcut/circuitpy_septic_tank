@@ -75,6 +75,9 @@ def main():
     mcu.booting = True # A flag to record boot messages
     mcu.log.info(f'STARTING {__filename__} {__version__}')
 
+    # Use the Adalogger RTC chip rather than ESP32-S2 RTC
+    mcu.attach_rtc_pcf8523()
+
     # Check what devices are present on the i2c bus
     mcu.i2c_identify(i2c_dict)
 
