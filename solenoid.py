@@ -370,7 +370,7 @@ def main():
         mcu.display.set_cursor(0,2)
         mcu.display.write(status)
         mcu.display.set_cursor(0,3)
-        mcu.display.write(f'Pulse {valves[0].pulse}/{NUM_PULSES} {(time.monotonic()-valves[0].timer_toggle):03}')
+        mcu.display.write(f'Pulse {valves[0].pulse}/{NUM_PULSES} {round((time.monotonic()-valves[0].timer_toggle),0)}')
 
         try:
             if status != mcu.valve_status:
