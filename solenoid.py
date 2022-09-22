@@ -23,6 +23,8 @@ __repo__ = "https://github.com/calcut/circuitpy-septic-tank"
 valves = []
 NUM_VALVES = 2
 TOGGLE_DURATION = 5 #seconds
+TOGGLE_OPEN_DURATION = 10
+TOGGLE_CLOSE_DURATION = 20
 FLOW_INTERVAL= 6 #(0.0333= 2 minutes) hours until next pulse time
 NUM_PULSES = 6
 AIO_GROUP = 'boness-valve'
@@ -152,17 +154,24 @@ class Valve():
 
         else: #Auto/Scheduled mode
             if self.pulsing:
-                if time.monotonic() - self.timer_toggle > TOGGLE_DURATION:
-                    self.timer_toggle = time.monotonic()
-                    
-                    if self.pulse >= NUM_PULSES:
-                        self.pulse = 0
-                        self.pulsing = False
-                        self.close()
-                    else: 
+                if self.motor.throttle == 1:
+
+                    if time.monotonic() - self.timer_toggle > TOGGLE_OPEN_DURATION:
+                        self.timer_toggle = time.monotonic()
+
                         self.toggle()
-                        if self.motor.throttle == 1:
-                            self.pulse += 1
+                        self.pulse += 1
+
+                else:
+                    if time.monotonic() - self.timer_toggle > TOGGLE_CLOSE_DURATION:
+                        self.timer_toggle = time.monotonic()
+                        self.toggle()
+
+                if self.pulse >= NUM_PULSES:
+                    self.pulse = 0
+                    self.pulsing = False
+                    self.close()
+      
             else:
                 if self.motor.throttle == 1:
                     self.close()
