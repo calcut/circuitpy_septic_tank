@@ -228,7 +228,8 @@ def main():
             mcu.aio.subscribe('led-color')
             mcu.aio.subscribe('flow-interval')
             mcu.aio.subscribe('next-flow')
-            mcu.aio.subscribe('toggle-duration')
+            mcu.aio.subscribe('toggle-open-duration')
+            mcu.aio.subscribe('toggle-close-duration')
             mcu.aio.subscribe('pulses')
 
     try:
@@ -302,11 +303,16 @@ def main():
                 payload = mcu.aio.updated_feeds.pop(feed_id)
                 mcu.log.debug(f"Got MQTT Command {feed_id=}, {payload=}")
 
-                if feed_id == 'toggle-duration':
-                    global TOGGLE_DURATION
-                    TOGGLE_DURATION = float(payload)
-                    mcu.log.info(f'setting {TOGGLE_DURATION=}')
+                if feed_id == 'toggle-open-duration':
+                    global TOGGLE_OPEN_DURATION
+                    TOGGLE_OPEN_DURATION = float(payload)
+                    mcu.log.info(f'setting {TOGGLE_OPEN_DURATION=}')
 
+                elif feed_id == 'toggle-close-duration':
+                    global TOGGLE_CLOSE_DURATION
+                    TOGGLE_CLOSE_DURATION = float(payload)
+                    mcu.log.info(f'setting {TOGGLE_CLOSE_DURATION=}')
+                    
                 elif feed_id == 'pulses':
                     global NUM_PULSES
                     NUM_PULSES = int(payload)
