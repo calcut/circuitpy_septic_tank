@@ -8,9 +8,6 @@
       "/circuitpy_septic_tank/septic_tank.py" : "https://raw.githubusercontent.com/calcut/circuitpy_septic_tank/main/septic_tank.py"
   },
   "f247" : {
-      "/circuitpy_mcu/mcu.py" : "https://raw.githubusercontent.com/calcut/circuitpy_mcu/v2-dev-offline/mcu.py",
-      "/circuitpy_mcu/aio.py" : "https://raw.githubusercontent.com/calcut/circuitpy_mcu/v2-dev-offline/aio.py",
-      "/circuitpy_mcu/wifi_manager.py" : "https://raw.githubusercontent.com/calcut/circuitpy_mcu/v2-dev-offline/wifi_manager.py",
       "/circuitpy_septic_tank/solenoid.py" : "https://raw.githubusercontent.com/calcut/circuitpy_septic_tank/mcu-v2-testing/solenoid.py"
   },
   "1205" : {
