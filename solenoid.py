@@ -21,12 +21,12 @@ __repo__ = "https://github.com/calcut/circuitpy-septic-tank"
 
 # global variable so valves can be shut down after keyboard interrupt
 valves = []
-NUM_VALVES = 2
+NUM_VALVES = 1
 TOGGLE_DURATION = 5 #seconds
 TOGGLE_OPEN_DURATION = 10
-TOGGLE_CLOSE_DURATION = 20
-FLOW_INTERVAL= 6 #(0.0333= 2 minutes) hours until next pulse time
-NUM_PULSES = 6
+TOGGLE_CLOSE_DURATION = 120
+FLOW_INTERVAL= 8 #(0.0333= 2 minutes) hours until next pulse time
+NUM_PULSES = 24
 AIO_GROUP = 'boness-valve'
 # LOGLEVEL = logging.DEBUG
 LOGLEVEL = logging.INFO
@@ -46,9 +46,9 @@ class Valve():
 
         self.manual = False
         self.pulsing = False
-        self.toggle_duration = TOGGLE_DURATION
+        # self.toggle_duration = TOGGLE_DURATION
         # self.num_pulses = NUM_PULSES
-        self.timer_toggle = time.monotonic()
+        self.timer_toggle = -TOGGLE_CLOSE_DURATION
         self.pulse = 0
 
         self.manual_pos = False #closed
@@ -155,17 +155,14 @@ class Valve():
         else: #Auto/Scheduled mode
             if self.pulsing:
                 if self.motor.throttle == 1:
-
                     if time.monotonic() - self.timer_toggle > TOGGLE_OPEN_DURATION:
                         self.timer_toggle = time.monotonic()
-
-                        self.toggle()
-                        self.pulse += 1
-
+                        self.close()
                 else:
                     if time.monotonic() - self.timer_toggle > TOGGLE_CLOSE_DURATION:
                         self.timer_toggle = time.monotonic()
-                        self.toggle()
+                        self.open()
+                        self.pulse += 1
 
                 if self.pulse >= NUM_PULSES:
                     self.pulse = 0
@@ -401,7 +398,7 @@ def main():
 
     if mcu.aio is None:
         # set_countdown_alarm(hours=FLOW_INTERVAL)
-        set_alarm(hour=9, minute=0)
+        set_alarm(hour=13, minute=13)
 
     mcu.booting = False # Stop accumulating boot log messages
     if mcu.aio is not None:
