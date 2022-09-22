@@ -32,9 +32,6 @@ AIO_GROUP = 'boness-valve'
 LOGLEVEL = logging.INFO
 FORCE_WIFI = False
 
-# If separate motor driver required to close valve
-CLOSING_MOTORS= True
-
 class Valve():
 
     def __init__(self, motor:DCMotor, name, loghandler=None):
@@ -233,11 +230,7 @@ def main():
         global valves
         valve_driver = MotorKit(i2c=mcu.i2c, address=0x78)
 
-        if CLOSING_MOTORS:
-            mcu.log.warning('Using "Closing Motors" for double driven valves')
-            motors = [valve_driver.motor1, valve_driver.motor3]
-        else:
-            motors = [valve_driver.motor1, valve_driver.motor2, valve_driver.motor3, valve_driver.motor4]
+        motors = [valve_driver.motor1, valve_driver.motor2, valve_driver.motor3, valve_driver.motor4]
 
         # Drop any unused valves as defined by the NUM_VALVES parameter
         motors = motors[:NUM_VALVES]
@@ -250,13 +243,6 @@ def main():
             if mcu.aio:
                 mcu.aio.subscribe(f"v{i:02}-mode")
                 mcu.aio.subscribe(f"v{i:02}-manual-pos")
-
-        if CLOSING_MOTORS:
-            valves[0].motor_close = valve_driver.motor2
-            valves[0].close()
-            valves[0].setup_position_signals(pin_open=board.D9, pin_close=board.D11)
-            valves[1].motor_close = valve_driver.motor4
-            valves[1].close()
         
     except Exception as e:
         mcu.handle_exception(e)
