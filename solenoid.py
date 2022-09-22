@@ -219,12 +219,12 @@ def main():
         # mcu.wifi.offline_retry_connection =  False #Hard reset
 
         if mcu.aio_setup(aio_group=f'{AIO_GROUP}-{mcu.id}'):
-            mcu.aio.subscribe('led-color')
-            mcu.aio.subscribe('flow-interval')
-            mcu.aio.subscribe('next-flow')
-            mcu.aio.subscribe('toggle-open-duration')
-            mcu.aio.subscribe('toggle-close-duration')
-            mcu.aio.subscribe('pulses')
+            mcu.aio_subscribe('led-color')
+            mcu.aio_subscribe('flow-interval')
+            mcu.aio_subscribe('next-flow')
+            mcu.aio_subscribe('toggle-open-duration')
+            mcu.aio_subscribe('toggle-close-duration')
+            mcu.aio_subscribe('pulses')
 
     try:
         global valves
@@ -241,8 +241,8 @@ def main():
             i+=1
             valves.append(Valve(motor=m, name=f'v{i:02}', loghandler=mcu.loghandler))
             if mcu.aio:
-                mcu.aio.subscribe(f"v{i:02}-mode")
-                mcu.aio.subscribe(f"v{i:02}-manual-pos")
+                mcu.aio_subscribe(f"v{i:02}-mode")
+                mcu.aio_subscribe(f"v{i:02}-manual-pos")
         
     except Exception as e:
         mcu.handle_exception(e)
