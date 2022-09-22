@@ -8,6 +8,7 @@
       "/circuitpy_septic_tank/septic_tank.py" : "https://raw.githubusercontent.com/calcut/circuitpy_septic_tank/main/septic_tank.py"
   },
   "f247" : {
+      "/circuitpy_mcu/mcu.py" : "https://raw.githubusercontent.com/calcut/circuitpy_mcu/v2-dev-offline/mcu.py",
       "/circuitpy_septic_tank/solenoid.py" : "https://raw.githubusercontent.com/calcut/circuitpy_septic_tank/mcu-v2-testing/solenoid.py"
   },
   "1205" : {
