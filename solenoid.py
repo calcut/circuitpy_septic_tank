@@ -435,7 +435,7 @@ def main():
                 if active and not mcu.wifi.connected:
                     pass
                 else:
-                    mcu.aio_sync(mcu.data, publish_interval=10)
+                    mcu.aio_sync(mcu.data, publish_interval=60)
                     parse_feeds()
 
 if __name__ == "__main__":
