@@ -154,17 +154,15 @@ class Valve():
                 if self.motor.throttle == 1:
                     if time.monotonic() - self.timer_toggle > TOGGLE_OPEN_DURATION:
                         self.timer_toggle = time.monotonic()
+                        if self.pulse >= NUM_PULSES:
+                            self.pulse = 0
+                            self.pulsing = False
                         self.close()
                 else:
                     if time.monotonic() - self.timer_toggle > TOGGLE_CLOSE_DURATION:
                         self.timer_toggle = time.monotonic()
                         self.open()
                         self.pulse += 1
-
-                if self.pulse >= NUM_PULSES:
-                    self.pulse = 0
-                    self.pulsing = False
-                    self.close()
       
             else:
                 if self.motor.throttle == 1:
