@@ -9,6 +9,7 @@
   },
   "f247" : {
       "/circuitpy_mcu/mcu.py" : "https://raw.githubusercontent.com/calcut/circuitpy_mcu/v2-dev-offline/mcu.py",
+      "/lib/adafruit_sdcard.py" : "https://raw.githubusercontent.com/calcut/Adafruit_CircuitPython_SD/main/adafruit_sdcard.py"
       "/circuitpy_septic_tank/solenoid.py" : "https://raw.githubusercontent.com/calcut/circuitpy_septic_tank/mcu-v2-testing/solenoid.py"
   },
   "1205" : {
