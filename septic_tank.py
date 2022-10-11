@@ -26,8 +26,8 @@ AIO = True
 
 GASCARD_PUMP_TIME = 2*60 #2 minutes
 GASCARD_INTERVAL = 4*60*60 #4 hours
-GASCARD = True
-# GASCARD = False
+# GASCARD = True
+GASCARD = False
 NUM_PUMPS = 2
 PH_CHANNELS = 1
 AIO_GROUP = 'boness'
