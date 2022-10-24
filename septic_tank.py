@@ -483,10 +483,10 @@ def main():
                 mcu.log.warning(f'string {string} not valid for pump settings\n'
                                  +'input pump settings in format "p pump_number speed duration" e.g. p ')
 
-        else:
-            if gc:
-                mcu.log.info(f'Writing to Gascard [{string}]')
-                gc.write_command(string)
+        # else:
+            # if gc:
+                # mcu.log.info(f'Writing to Gascard [{string}]')
+                # gc.write_command(string)
 
 
     mcu.log.info(f'BOOT complete at {mcu.get_timestamp()} UTC')
