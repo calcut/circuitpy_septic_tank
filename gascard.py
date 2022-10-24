@@ -12,66 +12,14 @@ class Gascard():
         self.timer = time.monotonic()
         self.mode = None
 
-        self.sample = None
-        self.reference = None
         self.concentration = None
         self.temperature = None
         self.pressure = None
 
-        self.firmware_version = None
-        self.serial_number = None
-        self.config_register = None
-        self.frequency = None
-        self.time_constant = None
-        self.switches_state = None
-
-    def restart(self):
-        self.ready = False
-        self.write_command('X')
-        self.write_command('q')
-        self.log.info('Restarting Gascard')
+    def poll_until_ready(self):
         while not self.ready:
             self.parse_serial()
         self.log.info('Gascard Found')
-        self.read_settings()
-
-        
-    def write_command(self, string):
-
-        # First empty the serial buffer, so we can look for acknowledgement
-        self.empty_serial_buffer()
-
-        command_bytes = bytearray(string)
-
-        # rough code to check for acknowledgement
-        response = None
-
-        expected_responses = {
-            # 'N1'   : b'N1',
-            # 'X'    : b'X',
-            'q'    : b' Waiting for application S-Record',
-        }
-
-        if string in expected_responses:
-            expected = expected_responses[string]
-        else:
-            expected = command_bytes
-
-        self.log.debug(f'writing {command_bytes}')
-        self.uart.write(command_bytes + bytearray('\r'))
-        line_start = None
-        i=0
-        while line_start != expected:
-            response = self.uart.readline()
-            if response:
-                i+=1
-                line_start = response[:len(expected)]
-            
-            if i >= 20:
-                self.log.debug(f'Command {string} not acknowledged after {i} reads')
-                return
-
-        self.log.debug(f'Command {string} acknowledged')
 
     def empty_serial_buffer(self):
         nbytes = self.uart.in_waiting
@@ -126,54 +74,23 @@ class Gascard():
                 if self.ready:
                     self.log.warning(f'gc data NOT PARSED [{data_string}]')
                 else:
-                    self.log.debug('possible startup issue detected, trying to select Normal Mode')
-                    self.log.debug(f'{data_string=}')
-                    time.sleep(1) 
-                    self.write_command('N')
+                    self.log.warning('possible startup issue detected')
+                    self.log.warning(f'{data_string=}')
 
             if self.mode == 'Normal':
-                self.log.info('Switching to N1 Channel Mode')
-                self.write_command('N1')
-
-            if self.mode == 'Normal Channel':
                 data = data_string.split(' ')
-                if len(data) == 7:
-                    self.sample = int(data[1])
-                    self.reference = int(data[2])
-                    try:
-                        self.concentration = float(data[4])
-                    except ValueError:
-                        self.log.debug(f'Gascard error {data_string=}')
-                        self.concentration = -100.0
-                    self.temperature = int(data[5])
-                    self.pressure = float(data[6])
+                try:
+                    self.concentration = float(data[1])
+                except ValueError:
+                    self.log.debug(f'Gascard error {data_string=}')
+                    self.concentration = -100.0
+                self.temperature = int(data[6])
+                self.pressure = float(data[7])
 
-            if self.mode == 'Settings':
-                data = data_string.split(' ')
-                if len(data) == 7:
-                    self.firmware_version = data[1]
-                    self.serial_number = data[2]
-                    self.config_register = data[3]
-                    self.frequency = data[4]
-                    self.time_constant = data[5]
-                    self.switches_state = data[6]
-            
+           
         except Exception as e:
             self.log.warning(str(e))
             self.log.warning(f'{data_string=}')
             raise
 
         return data_string
-
-
-    def read_settings(self):
-        self.write_command('X')
-        while self.mode != 'Settings':
-            self.parse_serial()
-        self.log.info(f'firmware_version={self.firmware_version} '
-                +f'serial_number={self.serial_number} '
-                +f'config_register={self.config_register} '
-                +f'frequency={self.frequency} '
-                +f'time_constant={self.time_constant} '
-                +f'switches_state={self.switches_state}')
-        self.write_command('N1')

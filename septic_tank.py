@@ -181,7 +181,7 @@ def main():
             gc.log.addHandler(mcu.loghandler)
             gc.log.setLevel(LOGLEVEL)
             mcu.watchdog_feed() #gascard startup can take a while
-            gc.restart()
+            gc.poll_until_ready()
             mcu.watchdog_feed() #gascard startup can take a while
 
 
@@ -221,17 +221,11 @@ def main():
     if display:
         if gc:
             display.clear()
-            display.write(f'Gascard FW={gc.firmware_version}')
-            display.set_cursor(0,1)
-            display.write(f'Serial Num={gc.serial_number}')
-            display.set_cursor(0,2)
-            display.write(f'conf={gc.config_register} freq={gc.frequency}')
-            display.set_cursor(0,3)
-            display.write(f'TC={gc.time_constant} SW={gc.switches_state}')
+            display.write(f'Gascard Found')
         else:
             display.clear()
             display.write(f'Gascard not used')
-        time.sleep(3)
+        time.sleep(1)
 
 
     def parse_feeds():
@@ -328,11 +322,9 @@ def main():
                 i = tc_channels.index(tc)
                 mcu.data[f'tc{i+1}'] = tc.temperature
 
-            mcu.data[f'debug-sample'] = gc.sample
-            mcu.data[f'debug-reference'] = gc.reference
+
             mcu.data[f'debug-concentration'] = gc.concentration
-            mcu.data[f'debug-pressure'] = gc.pressure
-            mcu.data[f'debug-temperature'] = gc.temperature
+
 
         if len(pumps) > 0:
             if (time.monotonic() - timer_gascard_interval) >= GASCARD_INTERVAL:
@@ -441,12 +433,8 @@ def main():
     def display_gascard_reading():
         display.labels[0]='CH4 Conc='
         display.labels[1]='Pressure='
-        display.labels[2]='Sample='
-        display.labels[3]='Reference='
         display.values[0] = f'{gc.concentration:7.4f}%'
         display.values[1] = f'{gc.pressure:6.1f} '
-        display.values[2] = f'{gc.sample} '
-        display.values[3] = f'{gc.reference} '
         display.show_data_long()
 
     def run_pump(index, speed=None, duration=None):
