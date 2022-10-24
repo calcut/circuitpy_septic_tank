@@ -408,7 +408,7 @@ def main():
             if gc:
                 display.set_cursor(0,1)
                 line = ''
-                data = filter_data('gc', decimal_places=4)
+                data = filter_data('debug-concentration', decimal_places=4)
                 for key in sorted(data):
                     # display as float with max 4 decimal places, and max 7 chars long
                         line += f' {data[key]:.4f}'[:7]
