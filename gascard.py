@@ -16,6 +16,11 @@ class Gascard():
         self.temperature = None
         self.pressure = None
 
+    def poll_until_ready(self):
+        while not self.ready:
+            self.parse_serial()
+        self.log.info('Gascard Found')
+
     def empty_serial_buffer(self):
         nbytes = self.uart.in_waiting
         while nbytes > 0:
