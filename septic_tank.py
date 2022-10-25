@@ -25,7 +25,8 @@ AIO = True
 # AIO = False
 
 GASCARD_PUMP_TIME = 2*60 #2 minutes
-GASCARD_INTERVAL = 4*60*60 #4 hours
+GASCARD_INTERVAL = 4*60 #4 minutes
+# GASCARD_INTERVAL = 4*60*60 #4 hours
 GASCARD = True
 # GASCARD = False
 NUM_PUMPS = 2
@@ -102,11 +103,10 @@ def main():
         # Networking Setup
         mcu.wifi.connect()
         if mcu.aio_setup(aio_group=f'{AIO_GROUP}-{mcu.id}'):
-            mcu.aio.connect()
             mcu.display_text('Subscribing to feeds')
-            mcu.aio.subscribe('pump1-speed')
-            mcu.aio.subscribe('pump2-speed')
-            mcu.aio.subscribe('pump3-speed')
+            mcu.aio_subscribe('pump1-speed')
+            mcu.aio_subscribe('pump2-speed')
+            mcu.aio_subscribe('pump3-speed')
 
     def connect_thermocouple_channels():
         tc_addresses = [0x60, 0x61, 0x62, 0x63]
@@ -164,6 +164,7 @@ def main():
             mcu.handle_exception(e)
             mcu.log.warning('Pump driver not found')
         
+        # return pumps_in
 
     def connect_gascard():
         try:
@@ -457,8 +458,7 @@ def main():
         mcu.watchdog_feed()
         mcu.read_serial(send_to=usb_serial_parser)
 
-        capture_data(interval=1)
-        log_sdcard(interval=30)
+
         if AIO:
             success = mcu.aio_sync(mcu.data, publish_interval=30)
 
@@ -469,6 +469,9 @@ def main():
                     del mcu.data[f'gc{p+1}'] # Simplified for one channel
                     mcu.log.info(f'deleted datapoint gc{p+1}')
             parse_feeds()
+
+        capture_data(interval=1)
+        log_sdcard(interval=30)
 
         # Check for incoming serial messages from Gascard
         if gc:
