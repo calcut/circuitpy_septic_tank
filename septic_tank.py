@@ -38,7 +38,8 @@ LOGLEVEL = logging.INFO
 DELETE_ARCHIVE = True
 
 # global variable so pumps can be shut down after keyboard interrupt
-pumps = []
+pumps_in = []
+pumps_out = []
 
 def main():
 
@@ -55,14 +56,11 @@ def main():
         '0x61' : 'Thermocouple Amp MCP9600',
         '0x62' : 'Thermocouple Amp MCP9600',
         '0x63' : 'Thermocouple Amp MCP9600',
-        '0x64' : 'Thermocouple Amp MCP9600',
-        '0x65' : 'Thermocouple Amp MCP9600',
-        '0x66' : 'Thermocouple Amp MCP9600',
-        '0x67' : 'Thermocouple Amp MCP9600',
         '0x68' : 'Realtime Clock PCF8523', # On Adalogger Featherwing
-        '0x70' : 'Motor Featherwing PCA9685', #Solder bridge on address bit A4
+        '0x6E' : 'Motor Featherwing PCA9685', #Solder bridge on address bit A1 A2 A3
+        '0x6F' : 'Motor Featherwing PCA9685', #Solder bridge on address bit A0 A1 A2 A3
         '0x72' : 'Sparkfun LCD Display',
-        '0x77' : 'Temp/Humidity/Pressure BME280' # Built into some ESP32S2 feathers 
+        # '0x77' : 'Temp/Humidity/Pressure BME280' # Built into some ESP32S2 feathers 
     }
 
     timer_gascard_interval = -GASCARD_INTERVAL
@@ -100,17 +98,18 @@ def main():
     mcu.watchdog_feed()
 
 
-    # Networking Setup
-    mcu.wifi.connect()
-    if mcu.aio_setup(aio_group=f'{AIO_GROUP}-{mcu.id}'):
-        mcu.aio.connect()
-        mcu.display_text('Subscribing to feeds')
-        mcu.aio.subscribe('pump1-speed')
-        mcu.aio.subscribe('pump2-speed')
-        mcu.aio.subscribe('pump3-speed')
+    if AIO:
+        # Networking Setup
+        mcu.wifi.connect()
+        if mcu.aio_setup(aio_group=f'{AIO_GROUP}-{mcu.id}'):
+            mcu.aio.connect()
+            mcu.display_text('Subscribing to feeds')
+            mcu.aio.subscribe('pump1-speed')
+            mcu.aio.subscribe('pump2-speed')
+            mcu.aio.subscribe('pump3-speed')
 
     def connect_thermocouple_channels():
-        tc_addresses = [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67]
+        tc_addresses = [0x60, 0x61, 0x62, 0x63]
         tc_channels = []
 
         for addr in tc_addresses:
@@ -150,18 +149,21 @@ def main():
 
     def connect_pumps():
         try:
-            global pumps
-            pump_driver = MotorKit(i2c=mcu.i2c, address=0x70)
-            pumps = [pump_driver.motor1, pump_driver.motor2, pump_driver.motor3, pump_driver.motor4]
+            global pumps_in
+            global pumps_out
+            pump_driver_out = MotorKit(i2c=mcu.i2c, address=0x6E)
+            pump_driver_in = MotorKit(i2c=mcu.i2c, address=0x6F)
+            pumps_in = [pump_driver_in.motor1, pump_driver_in.motor2, pump_driver_in.motor3, pump_driver_in.motor4]
+            pumps_out = [pump_driver_out.motor1, pump_driver_out.motor2, pump_driver_out.motor3, pump_driver_out.motor4]
 
             # Drop any unused pumps as defined by the NUM_PUMPS parameter
-            pumps = pumps[:NUM_PUMPS]
+            pumps_in = pumps_in[:NUM_PUMPS]
+            pumps_out = pumps_out[:NUM_PUMPS]
             
         except Exception as e:
             mcu.handle_exception(e)
             mcu.log.warning('Pump driver not found')
         
-        return pumps
 
     def connect_gascard():
         try:
@@ -182,7 +184,7 @@ def main():
 
     tc_channels = connect_thermocouple_channels()
     ph_channels = connect_ph_channels()
-    pumps = connect_pumps()
+    connect_pumps()
 
     if display:
         display.clear()
@@ -190,7 +192,7 @@ def main():
         display.set_cursor(0,1)
         display.write(f'{len(ph_channels)} pH channels')
         display.set_cursor(0,2)
-        display.write(f'{len(pumps)} air pumps')
+        display.write(f'{len(pumps_in)} air pumps')
         display.set_cursor(0,3)
         display.write(f'Waiting for gascard')
 
@@ -250,8 +252,8 @@ def main():
 
                 text += f' gc:'
                 if gc:
-                    for p in pumps:
-                        channel = f'gc{pumps.index(p) + 1}'
+                    for p in pumps_in:
+                        channel = f'gc{pumps_in.index(p) + 1}'
                         data = filter_data(f'{channel}', decimal_places=4)
                         if data:
                             text+= f' {data[channel]:.4f}'
@@ -272,6 +274,8 @@ def main():
         nonlocal timer_gascard_interval
         nonlocal timer_pump
         nonlocal pump_index
+        global pumps_in
+        global pumps_out
 
         if (time.monotonic() - timer_capture) >= interval:
             timer_capture = time.monotonic()
@@ -291,13 +295,14 @@ def main():
             mcu.data[f'debug-concentration'] = gc.concentration
 
 
-        if len(pumps) > 0:
+        if len(pumps_in) > 0:
             if (time.monotonic() - timer_gascard_interval) >= GASCARD_INTERVAL:
                 timer_gascard_interval = time.monotonic()
                 timer_pump = time.monotonic()
 
                 speed = pump_speeds[pump_index-1]
-                pumps[pump_index-1].throttle = speed
+                pumps_in[pump_index-1].throttle = speed
+                pumps_out[pump_index-1].throttle = speed
                 mcu.log.info(f'running pump {pump_index} at speed={speed} after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
 
 
@@ -309,7 +314,8 @@ def main():
                 mcu.log.info(f'disabling pump{pump_index} after GASCARD_PUMP_TIME = {GASCARD_PUMP_TIME}')
                 # Push timer_pump out into the future so this won't trigger again until after the next sample
                 timer_pump = timer_gascard_interval + GASCARD_INTERVAL*2
-                pumps[pump_index-1].throttle = 0
+                pumps_in[pump_index-1].throttle = 0
+                pumps_out[pump_index-1].throttle = 0
 
                 pump_index += 1
                 if pump_index > NUM_PUMPS:
@@ -365,9 +371,9 @@ def main():
 
     def display_summary():
         if display:
-            if len(pumps) > 0:
+            if len(pumps_in) > 0:
                 display.set_cursor(0,0)
-                line = f'pump{pump_index}={pumps[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C         '
+                line = f'pump{pump_index}={pumps_in[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C         '
                 display.write(line[:20])
 
             if gc:
@@ -404,11 +410,13 @@ def main():
 
     def run_pump(index, speed=None, duration=None):
 
-        pumps[index-1].throttle = speed
+        pumps_in[index-1].throttle = speed
+        pumps_out[index-1].throttle = speed
         if duration:
             mcu.log.info(f'running pump{index} at speed={speed} for {duration}s')
             time.sleep(duration)
-            pumps[index-1].throttle = 0
+            pumps_in[index-1].throttle = 0
+            pumps_out[index-1].throttle = 0
         else:
             mcu.log.info(f'running pump{index} at speed={speed}')
 
@@ -451,15 +459,16 @@ def main():
 
         capture_data(interval=1)
         log_sdcard(interval=30)
-        success = mcu.aio_sync(mcu.data, publish_interval=30)
+        if AIO:
+            success = mcu.aio_sync(mcu.data, publish_interval=30)
 
-        # don't keep transmitting this until next updated.
-        # TODO, this is probably broken!! we don't know if gc has been successfully sent
-        for p in range(len(pumps)):
-            if f'gc{p+1}' in mcu.data:
-                del mcu.data[f'gc{p+1}'] # Simplified for one channel
-                mcu.log.info(f'deleted datapoint gc{p+1}')
-        parse_feeds()
+            # don't keep transmitting this until next updated.
+            # TODO, this is probably broken!! we don't know if gc has been successfully sent
+            for p in range(len(pumps_in)):
+                if f'gc{p+1}' in mcu.data:
+                    del mcu.data[f'gc{p+1}'] # Simplified for one channel
+                    mcu.log.info(f'deleted datapoint gc{p+1}')
+            parse_feeds()
 
         # Check for incoming serial messages from Gascard
         if gc:
@@ -473,7 +482,9 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print('Code Stopped by Keyboard Interrupt')
-        for p in pumps:
+        for p in pumps_in:
+            p.throttle = 0
+        for p in pumps_out:
             p.throttle = 0
 
     except Exception as e:
