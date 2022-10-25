@@ -109,17 +109,6 @@ def main():
         mcu.aio.subscribe('pump2-speed')
         mcu.aio.subscribe('pump3-speed')
 
-        # mcu.wifi_connect()
-        # group = f'{AIO_GROUP}-{mcu.id}'
-        # if display:
-            # display.show_text(f'AIO: {group}')
-        # aio = Aio_http(mcu.requests, group, mcu.loghandler)
-        # aio.log.setLevel(LOGLEVEL)
-        # mcu.loghandler.aio = aio
-        # pump_speeds[0] = float(aio.subscribed_feeds['pump1-speed']['last_value'])
-        # pump_speeds[1] = float(aio.subscribed_feeds['pump2-speed']['last_value'])
-        # pump_speeds[2] = float(aio.subscribed_feeds['pump3-speed']['last_value'])
-
     def connect_thermocouple_channels():
         tc_addresses = [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67]
         tc_channels = []
@@ -184,13 +173,6 @@ def main():
             gc.poll_until_ready()
             mcu.watchdog_feed() #gascard startup can take a while
 
-
-        # Probably do not want this, as it effectively ignores some gascard errors
-        # except WatchDogTimeout:
-        #     print('Timed out waiting for Gascard')
-        #     mcu.log.warning('Gascard not found')
-        #     gc = None 
-
         except Exception as e:
             mcu.handle_exception(e)
             mcu.log.warning('Gascard not found')
@@ -248,23 +230,6 @@ def main():
 
                 if feed_id == 'ota':
                     mcu.ota_reboot()
-
-    # def publish_feeds(interval):
-    #     # AIO limits to 30 data points per minute and 10 feeds in the free version
-    #     if AIO and len(mcu.data) > 0:
-
-    #         # Optionally filter e.g. to get <10 feeds
-    #         # data = filter_data('TC', decimal_places=3)
-    #         data = mcu.data
-
-    #         # location = "57.2445673, -4.3978963, 220" #Gorthleck, as an example
-
-    #         #This will automatically limit its rate to not get throttled by AIO
-    #         success = aio.publish_feeds(data, interval=interval, location=None)
-
-    #         if success:
-
-
 
     def log_sdcard(interval=30):
         nonlocal timer_sd
@@ -447,22 +412,6 @@ def main():
         else:
             mcu.log.info(f'running pump{index} at speed={speed}')
 
-    # def rotate_pumps():
-
-    #     global pump_index
-    #     pump_index += 1
-    #     if pump_index > NUM_PUMPS:
-    #         pump_index = 1
-
-    #     # Stop all pumps
-    #     for p in pumps:
-    #         p.throttle = 0
-
-    #     # start the desired pump
-    #     speed = pump_speeds[pump_index - 1]
-    #     pumps[pump_index-1].throttle = speed
-    #     mcu.log.info(f'running pump{pump_index} at speed={speed}')
-
 
     def usb_serial_parser(string):
         if string == 'phcal':
@@ -501,7 +450,6 @@ def main():
         mcu.read_serial(send_to=usb_serial_parser)
 
         capture_data(interval=1)
-        # publish_feeds(interval=30)
         log_sdcard(interval=30)
         success = mcu.aio_sync(mcu.data, publish_interval=30)
 
