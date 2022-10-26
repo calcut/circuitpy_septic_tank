@@ -233,6 +233,10 @@ def main():
                     pump_speeds[2] = float(payload)
 
                 if feed_id == 'ota':
+                    for p in pumps_in:
+                        p.throttle = 0
+                    for p in pumps_out:
+                        p.throttle = 0
                     mcu.ota_reboot()
 
     def log_sdcard(interval=30):
