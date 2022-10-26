@@ -25,8 +25,8 @@ AIO = True
 # AIO = False
 
 GASCARD_PUMP_TIME = 2*60 #2 minutes
-GASCARD_INTERVAL = 4*60 #4 minutes
-# GASCARD_INTERVAL = 4*60*60 #4 hours
+# GASCARD_INTERVAL = 4*60 #4 minutes
+GASCARD_INTERVAL = 4*60*60 #4 hours
 GASCARD = True
 # GASCARD = False
 NUM_PUMPS = 2
@@ -151,8 +151,9 @@ def main():
         try:
             global pumps_in
             global pumps_out
-            pump_driver_out = MotorKit(i2c=mcu.i2c, address=0x6E)
-            pump_driver_in = MotorKit(i2c=mcu.i2c, address=0x6F)
+            # Changing pwm freq from 1600Hz to <500Hz helps a lot with matching speeds. unsure exactly why. 
+            pump_driver_out = MotorKit(i2c=mcu.i2c, address=0x6E, pwm_frequency=400)
+            pump_driver_in = MotorKit(i2c=mcu.i2c, address=0x6F, pwm_frequency=400)
             pumps_in = [pump_driver_in.motor1, pump_driver_in.motor2, pump_driver_in.motor3, pump_driver_in.motor4]
             pumps_out = [pump_driver_out.motor1, pump_driver_out.motor2, pump_driver_out.motor3, pump_driver_out.motor4]
 
@@ -292,8 +293,8 @@ def main():
                 i = tc_channels.index(tc)
                 mcu.data[f'tc{i+1}'] = tc.temperature
 
-
-            mcu.data[f'debug-concentration'] = gc.concentration
+            if gc:
+                mcu.data[f'debug-concentration'] = gc.concentration
 
 
         if len(pumps_in) > 0:
@@ -492,4 +493,8 @@ if __name__ == "__main__":
 
     except Exception as e:
         print(f'Code stopped by unhandled exception:')
+        for p in pumps_in:
+            p.throttle = 0
+        for p in pumps_out:
+            p.throttle = 0
         reset(e)
