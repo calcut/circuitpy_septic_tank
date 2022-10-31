@@ -465,14 +465,7 @@ def main():
 
 
         if AIO:
-            success = mcu.aio_sync(mcu.data, publish_interval=30)
-
-            # don't keep transmitting this until next updated.
-            # TODO, this is probably broken!! we don't know if gc has been successfully sent
-            for p in range(len(pumps_in)):
-                if f'gc{p+1}' in mcu.data:
-                    del mcu.data[f'gc{p+1}'] # Simplified for one channel
-                    mcu.log.info(f'deleted datapoint gc{p+1}')
+            mcu.aio_sync(mcu.data, publish_interval=30)
             parse_feeds()
 
         capture_data(interval=1)
