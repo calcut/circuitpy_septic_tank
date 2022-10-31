@@ -57,6 +57,10 @@ def main():
         '0x61' : 'Thermocouple Amp MCP9600',
         '0x62' : 'Thermocouple Amp MCP9600',
         '0x63' : 'Thermocouple Amp MCP9600',
+        '0x64' : 'Thermocouple Amp MCP9600',
+        '0x65' : 'Thermocouple Amp MCP9600',
+        '0x66' : 'Thermocouple Amp MCP9600',
+        '0x67' : 'Thermocouple Amp MCP9600',
         '0x68' : 'Realtime Clock PCF8523', # On Adalogger Featherwing
         '0x6E' : 'Motor Featherwing PCA9685', #Solder bridge on address bit A1 A2 A3
         '0x6F' : 'Motor Featherwing PCA9685', #Solder bridge on address bit A0 A1 A2 A3
@@ -109,7 +113,7 @@ def main():
             mcu.aio_subscribe('pump3-speed')
 
     def connect_thermocouple_channels():
-        tc_addresses = [0x60, 0x61, 0x62, 0x63]
+        tc_addresses = [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67]
         tc_channels = []
 
         for addr in tc_addresses:
