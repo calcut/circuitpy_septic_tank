@@ -25,7 +25,7 @@ AIO = True
 # AIO = False
 
 # GASCARD_PUMP_TIME = 20 #20 seconds
-GASCARD_PUMP_TIME = 2*60 #2 minutes
+GASCARD_PUMP_TIME = 4*60 #4 minutes
 GASCARD_INTERVAL = 4 #hours
 GASCARD = True
 # GASCARD = False
@@ -49,7 +49,7 @@ def main():
     pump_index = 1
     gc_pump_time = GASCARD_PUMP_TIME
     gc_interval = GASCARD_INTERVAL
-    gc_pump_sequence = [2,1,2]
+    gc_pump_sequence = [1,2]
     gc_sequence_index = 0
 
     # Optional list of expected I2C devices and addresses
@@ -364,7 +364,7 @@ def main():
 
         if len(pumps_in) > 0:
             if mcu.rtc.alarm_status:
-                mcu.log.warning('RTC Alarm: Gascard Sampling Starting')
+                mcu.log.info('RTC Alarm: Gascard Sampling Starting')
                 mcu.rtc.alarm_status = False
                 set_countdown_alarm(hours=gc_interval)
 
@@ -373,7 +373,7 @@ def main():
                 pumps_in[pump_index-1].throttle = speed
                 pumps_out[pump_index-1].throttle = speed
                 timer_pump = time.monotonic()
-                mcu.log.info(f'GC sampling sequence: Starting with pump {pump_index} at {speed=}')
+                mcu.log.warning(f'GC sampling sequence: Starting with pump {pump_index} at {speed=}')
 
             if time.monotonic() - timer_pump > gc_pump_time:
                 print(f'{timer_pump=}')
@@ -391,7 +391,7 @@ def main():
                     gc_sequence_index = 0
                     # Push timer_pump out into the future so this won't trigger again until after the next sample alarm
                     timer_pump = time.monotonic() + gc_interval*60*60*10
-                    mcu.log.info(f'GC sampling sequence complete')
+                    mcu.log.warning(f'GC sampling sequence complete')
 
                 else:
                     pump_index = gc_pump_sequence[gc_sequence_index]
@@ -399,7 +399,7 @@ def main():
                     pumps_in[pump_index-1].throttle = speed
                     pumps_out[pump_index-1].throttle = speed
                     timer_pump = time.monotonic()
-                    mcu.log.info(f'GC sampling sequence: running pump {pump_index} at {speed=}')
+                    mcu.log.warning(f'GC sampling sequence: running pump {pump_index} at {speed=}')
 
 
 
