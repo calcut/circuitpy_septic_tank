@@ -21,17 +21,16 @@ __repo__ = "https://github.com/calcut/circuitpy-septic-tank"
 
 # global variable so valves can be shut down after keyboard interrupt
 valves = []
-NUM_VALVES = 2
+NUM_VALVES = 1
 TOGGLE_DURATION = 5 #seconds
-FLOW_INTERVAL= 6 #(0.0333= 2 minutes) hours until next pulse time
-NUM_PULSES = 6
+TOGGLE_OPEN_DURATION = 10
+TOGGLE_CLOSE_DURATION = 120
+FLOW_INTERVAL= 8 #(0.0333= 2 minutes) hours until next pulse time
+NUM_PULSES = 24
 AIO_GROUP = 'boness-valve'
 # LOGLEVEL = logging.DEBUG
 LOGLEVEL = logging.INFO
 FORCE_WIFI = False
-
-# If separate motor driver required to close valve
-CLOSING_MOTORS= True
 
 class Valve():
 
@@ -44,9 +43,9 @@ class Valve():
 
         self.manual = False
         self.pulsing = False
-        self.toggle_duration = TOGGLE_DURATION
+        # self.toggle_duration = TOGGLE_DURATION
         # self.num_pulses = NUM_PULSES
-        self.timer_toggle = time.monotonic()
+        self.timer_toggle = -TOGGLE_CLOSE_DURATION
         self.pulse = 0
 
         self.manual_pos = False #closed
@@ -152,17 +151,19 @@ class Valve():
 
         else: #Auto/Scheduled mode
             if self.pulsing:
-                if time.monotonic() - self.timer_toggle > TOGGLE_DURATION:
-                    self.timer_toggle = time.monotonic()
-                    
-                    if self.pulse >= NUM_PULSES:
-                        self.pulse = 0
-                        self.pulsing = False
+                if self.motor.throttle == 1:
+                    if time.monotonic() - self.timer_toggle > TOGGLE_OPEN_DURATION:
+                        self.timer_toggle = time.monotonic()
+                        if self.pulse >= NUM_PULSES:
+                            self.pulse = 0
+                            self.pulsing = False
                         self.close()
-                    else: 
-                        self.toggle()
-                        if self.motor.throttle == 1:
-                            self.pulse += 1
+                else:
+                    if time.monotonic() - self.timer_toggle > TOGGLE_CLOSE_DURATION:
+                        self.timer_toggle = time.monotonic()
+                        self.open()
+                        self.pulse += 1
+      
             else:
                 if self.motor.throttle == 1:
                     self.close()
@@ -216,21 +217,18 @@ def main():
         # mcu.wifi.offline_retry_connection =  False #Hard reset
 
         if mcu.aio_setup(aio_group=f'{AIO_GROUP}-{mcu.id}'):
-            mcu.aio.subscribe('led-color')
-            mcu.aio.subscribe('flow-interval')
-            mcu.aio.subscribe('next-flow')
-            mcu.aio.subscribe('toggle-duration')
-            mcu.aio.subscribe('pulses')
+            mcu.aio_subscribe('led-color')
+            mcu.aio_subscribe('flow-interval')
+            mcu.aio_subscribe('next-flow')
+            mcu.aio_subscribe('toggle-open-duration')
+            mcu.aio_subscribe('toggle-close-duration')
+            mcu.aio_subscribe('pulses')
 
     try:
         global valves
         valve_driver = MotorKit(i2c=mcu.i2c, address=0x78)
 
-        if CLOSING_MOTORS:
-            mcu.log.warning('Using "Closing Motors" for double driven valves')
-            motors = [valve_driver.motor1, valve_driver.motor3]
-        else:
-            motors = [valve_driver.motor1, valve_driver.motor2, valve_driver.motor3, valve_driver.motor4]
+        motors = [valve_driver.motor1, valve_driver.motor2, valve_driver.motor3, valve_driver.motor4]
 
         # Drop any unused valves as defined by the NUM_VALVES parameter
         motors = motors[:NUM_VALVES]
@@ -241,15 +239,8 @@ def main():
             i+=1
             valves.append(Valve(motor=m, name=f'v{i:02}', loghandler=mcu.loghandler))
             if mcu.aio:
-                mcu.aio.subscribe(f"v{i:02}-mode")
-                mcu.aio.subscribe(f"v{i:02}-manual-pos")
-
-        if CLOSING_MOTORS:
-            valves[0].motor_close = valve_driver.motor2
-            valves[0].close()
-            valves[0].setup_position_signals(pin_open=board.D9, pin_close=board.D11)
-            valves[1].motor_close = valve_driver.motor4
-            valves[1].close()
+                mcu.aio_subscribe(f"v{i:02}-mode")
+                mcu.aio_subscribe(f"v{i:02}-manual-pos")
         
     except Exception as e:
         mcu.handle_exception(e)
@@ -293,11 +284,16 @@ def main():
                 payload = mcu.aio.updated_feeds.pop(feed_id)
                 mcu.log.debug(f"Got MQTT Command {feed_id=}, {payload=}")
 
-                if feed_id == 'toggle-duration':
-                    global TOGGLE_DURATION
-                    TOGGLE_DURATION = float(payload)
-                    mcu.log.info(f'setting {TOGGLE_DURATION=}')
+                if feed_id == 'toggle-open-duration':
+                    global TOGGLE_OPEN_DURATION
+                    TOGGLE_OPEN_DURATION = float(payload)
+                    mcu.log.info(f'setting {TOGGLE_OPEN_DURATION=}')
 
+                elif feed_id == 'toggle-close-duration':
+                    global TOGGLE_CLOSE_DURATION
+                    TOGGLE_CLOSE_DURATION = float(payload)
+                    mcu.log.info(f'setting {TOGGLE_CLOSE_DURATION=}')
+                    
                 elif feed_id == 'pulses':
                     global NUM_PULSES
                     NUM_PULSES = int(payload)
@@ -372,11 +368,11 @@ def main():
         mcu.display.set_cursor(0,2)
         mcu.display.write(status)
         mcu.display.set_cursor(0,3)
-        mcu.display.write(f'Pulse {valves[0].pulse}/{NUM_PULSES}')
+        mcu.display.write(f'Pulse {valves[0].pulse}/{NUM_PULSES} {int(time.monotonic()-valves[0].timer_toggle)}               '[:20])
 
         try:
             if status != mcu.valve_status:
-                mcu.log.info(f'Valves: {status} Pulse {valves[0].pulse}/{NUM_PULSES}' )
+                mcu.log.warning(f'Valves: {status} Pulse {valves[0].pulse}/{NUM_PULSES}' )
         except AttributeError:
             pass
         mcu.valve_status = status
@@ -386,7 +382,7 @@ def main():
 
     if mcu.aio is None:
         # set_countdown_alarm(hours=FLOW_INTERVAL)
-        set_alarm(hour=9, minute=0)
+        set_alarm(hour=13, minute=13)
 
     mcu.booting = False # Stop accumulating boot log messages
     if mcu.aio is not None:
@@ -426,7 +422,7 @@ def main():
                 if active and not mcu.wifi.connected:
                     pass
                 else:
-                    mcu.aio_sync(mcu.data, publish_interval=10)
+                    mcu.aio_sync(mcu.data, publish_interval=60)
                     parse_feeds()
 
 if __name__ == "__main__":
