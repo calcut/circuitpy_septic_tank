@@ -15,6 +15,7 @@ import board
 # scheduling and event/error handling libs
 import adafruit_logging as logging
 
+
 __version__ = "2.0.0_rtc"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
 __filename__ = "septic_tank.py"
@@ -29,6 +30,7 @@ GASCARD_PUMP_TIME = 4*60 #4 minutes
 GASCARD_INTERVAL = 4 #hours
 GASCARD = True
 # GASCARD = False
+
 NUM_PUMPS = 2
 PH_CHANNELS = 1
 AIO_GROUP = 'boness'
@@ -360,7 +362,6 @@ def main():
 
             if gc:
                 mcu.data[f'debug-concentration'] = gc.concentration
-
 
         if len(pumps_in) > 0:
             if mcu.rtc.alarm_status:

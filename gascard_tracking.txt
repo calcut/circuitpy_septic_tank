@@ -1,0 +1,17 @@
+Card Serial 22727
+Chamber Serial 65452
+
+Last location: Calum's house
+
+Notes:
+Was installed for several months at Bo'ness.
+Has not been returned to Edinburgh Instruments for recalibration
+
+Settings, Recorded 2022-10-22:
+X 1.17 22727 4106 8 0 0
+N -0.0002 0.0000 0.0000 0.00 0.0000 31003 993.5 0
+N1 51877 51204 0 -0.0002 30975 993.5
+O1 1.0000 -80.0000 0 1.0071 -0.0010 3992
+C1 0.0144 0.6416 0.8042 -0.4602 0.9973 0.3210 3276 3276 248 183
+E1 30562 30496 0.3194 926 19.0000 -0.3627 1.0651 0.2976 -10 -320
+
