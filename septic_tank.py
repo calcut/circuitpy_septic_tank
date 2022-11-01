@@ -24,9 +24,9 @@ __filename__ = "septic_tank.py"
 AIO = True
 # AIO = False
 
+# GASCARD_PUMP_TIME = 20 #20 seconds
 GASCARD_PUMP_TIME = 2*60 #2 minutes
-# GASCARD_INTERVAL = 4*60 #4 minutes
-GASCARD_INTERVAL = 4*60*60 #4 hours
+GASCARD_INTERVAL = 4 #hours
 GASCARD = True
 # GASCARD = False
 NUM_PUMPS = 2
@@ -47,6 +47,10 @@ def main():
     # defaults, will be overwritten if connected to AIO
     pump_speeds = [0.6, 0.6, 0.6]
     pump_index = 1
+    gc_pump_time = GASCARD_PUMP_TIME
+    gc_interval = GASCARD_INTERVAL
+    gc_pump_sequence = [2,1,2]
+    gc_sequence_index = 0
 
     # Optional list of expected I2C devices and addresses
     # Maybe useful for automatic configuration in future
@@ -68,8 +72,7 @@ def main():
         # '0x77' : 'Temp/Humidity/Pressure BME280' # Built into some ESP32S2 feathers 
     }
 
-    timer_gascard_interval = -GASCARD_INTERVAL
-    timer_pump = 0
+    timer_pump = gc_interval*60*60*10
     timer_capture = 0
     timer_sd = 0
 
@@ -111,6 +114,9 @@ def main():
             mcu.aio_subscribe('pump1-speed')
             mcu.aio_subscribe('pump2-speed')
             mcu.aio_subscribe('pump3-speed')
+            mcu.aio_subscribe('next-gc-sample')
+            mcu.aio_subscribe('gc-interval')
+            mcu.aio_subscribe('gc-pump-time')
 
     def connect_thermocouple_channels():
         tc_addresses = [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67]
@@ -164,6 +170,11 @@ def main():
             # Drop any unused pumps as defined by the NUM_PUMPS parameter
             pumps_in = pumps_in[:NUM_PUMPS]
             pumps_out = pumps_out[:NUM_PUMPS]
+
+            for p in pumps_in:
+                p.throttle = 0
+            for p in pumps_out:
+                p.throttle = 0
             
         except Exception as e:
             mcu.handle_exception(e)
@@ -187,6 +198,23 @@ def main():
             raise
 
         return gc
+
+    def set_alarm(hour=0, minute=1, repeat="daily"):
+        # NB setting alarm seconds is not supported by the hardware
+        alarm_time = time.struct_time((2000,1,1,hour,minute,0,0,1,-1))
+        mcu.rtc.alarm = (alarm_time, repeat)
+        mcu.log.warning(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
+        if mcu.aio:
+            mcu.aio.publish(feed_key='next-gc-sample', data=f'{alarm_time.tm_hour:02}:{alarm_time.tm_min:02}')
+
+    def set_countdown_alarm(hours=0, minutes=0, repeat="daily"):
+        # NB setting alarm seconds is not supported by the hardware
+        posix_time = time.mktime(mcu.rtc.datetime)
+        alarm_time = time.localtime(posix_time + int(minutes*60) + int(hours*60*60))
+        mcu.rtc.alarm = (alarm_time, repeat)
+        mcu.log.warning(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
+        if mcu.aio:
+            mcu.aio.publish(feed_key='next-gc-sample', data=f'{alarm_time.tm_hour:02}:{alarm_time.tm_min:02}')
 
     tc_channels = connect_thermocouple_channels()
     ph_channels = connect_ph_channels()
@@ -219,6 +247,9 @@ def main():
 
 
     def parse_feeds():
+        nonlocal gc_interval
+        nonlocal gc_pump_time
+
         if mcu.aio is not None:
             for feed_id in mcu.aio.updated_feeds.keys():
                 payload = mcu.aio.updated_feeds.pop(feed_id)
@@ -235,6 +266,27 @@ def main():
                     pump_speeds[1] = float(payload)
                 if feed_id == f'pump3-speed':
                     pump_speeds[2] = float(payload)
+
+                if feed_id == 'gc-sample-interval':
+                    gc_interval = int(payload)
+                    mcu.log.info(f'setting {gc_interval=} hours')
+
+                if feed_id == 'gc-pump-time':
+                    gc_pump_time = int(payload)
+                    mcu.log.info(f'setting {gc_pump_time=} seconds')
+
+                if feed_id == 'next-gc-sample':
+                    ns = payload.split(':')
+                    if len(ns) == 2:
+                        hour = int(ns[0])
+                        minute = int(ns[1])
+                        a = mcu.rtc.alarm[0]
+
+                        # only update if there is a change
+                        if (hour != a.tm_hour) or (minute != a.tm_min):
+                            set_alarm(hour, minute)
+                    else:
+                        mcu.log.error(f"Couldn't parse next-flow {payload}")                    
 
                 if feed_id == 'ota':
                     for p in pumps_in:
@@ -281,9 +333,14 @@ def main():
 
     def capture_data(interval=1):
         nonlocal timer_capture
-        nonlocal timer_gascard_interval
         nonlocal timer_pump
+
+        nonlocal gc_pump_time
+        nonlocal gc_interval
+        nonlocal gc_pump_sequence
+        nonlocal gc_sequence_index
         nonlocal pump_index
+
         global pumps_in
         global pumps_out
 
@@ -306,30 +363,47 @@ def main():
 
 
         if len(pumps_in) > 0:
-            if (time.monotonic() - timer_gascard_interval) >= GASCARD_INTERVAL:
-                timer_gascard_interval = time.monotonic()
-                timer_pump = time.monotonic()
+            if mcu.rtc.alarm_status:
+                mcu.log.warning('RTC Alarm: Gascard Sampling Starting')
+                mcu.rtc.alarm_status = False
+                set_countdown_alarm(hours=gc_interval)
 
+                pump_index = gc_pump_sequence[gc_sequence_index]
                 speed = pump_speeds[pump_index-1]
                 pumps_in[pump_index-1].throttle = speed
                 pumps_out[pump_index-1].throttle = speed
-                mcu.log.info(f'running pump {pump_index} at speed={speed} after GASCARD_INTERVAL = {GASCARD_INTERVAL}')
+                timer_pump = time.monotonic()
+                mcu.log.info(f'GC sampling sequence: Starting with pump {pump_index} at {speed=}')
 
+            if time.monotonic() - timer_pump > gc_pump_time:
+                print(f'{timer_pump=}')
 
-            if time.monotonic() - timer_pump > GASCARD_PUMP_TIME:
                 if gc:
                     mcu.data[f'gc{pump_index}'] = gc.concentration
                     mcu.log.info(f'Capturing gascard gc{pump_index} sample')
 
-                mcu.log.info(f'disabling pump{pump_index} after GASCARD_PUMP_TIME = {GASCARD_PUMP_TIME}')
-                # Push timer_pump out into the future so this won't trigger again until after the next sample
-                timer_pump = timer_gascard_interval + GASCARD_INTERVAL*2
                 pumps_in[pump_index-1].throttle = 0
-                pumps_out[pump_index-1].throttle = 0
+                pumps_out[pump_index-1].throttle = 0  
+                mcu.log.info(f'disabling pump{pump_index} after {gc_pump_time=}')
 
-                pump_index += 1
-                if pump_index > NUM_PUMPS:
-                    pump_index = 1
+                gc_sequence_index += 1
+                if gc_sequence_index >= len(gc_pump_sequence) :
+                    gc_sequence_index = 0
+                    # Push timer_pump out into the future so this won't trigger again until after the next sample alarm
+                    timer_pump = time.monotonic() + gc_interval*60*60*10
+                    mcu.log.info(f'GC sampling sequence complete')
+
+                else:
+                    pump_index = gc_pump_sequence[gc_sequence_index]
+                    speed = pump_speeds[pump_index-1]
+                    pumps_in[pump_index-1].throttle = speed
+                    pumps_out[pump_index-1].throttle = speed
+                    timer_pump = time.monotonic()
+                    mcu.log.info(f'GC sampling sequence: running pump {pump_index} at {speed=}')
+
+
+
+
         
         display_summary()
 
@@ -460,8 +534,12 @@ def main():
     if display:
         display.clear()
     mcu.booting = False # Stop accumulating boot log messages
+
     if mcu.aio is not None:
         mcu.aio.publish_long('log', mcu.logdata) # Send the boot log
+
+    if mcu.aio is None:
+        set_countdown_alarm(minutes=1)
 
     while True:
         mcu.watchdog_feed()
