@@ -2,7 +2,8 @@ import time
 from circuitpy_mcu.mcu import Mcu
 from circuitpy_mcu.ota_bootloader import reset, enable_watchdog
 from circuitpy_mcu.display import LCD_20x4
-from circuitpy_mcu.aio import Aio_http
+from circuitpy_mcu.initial_state import Initial_state_streamer
+
 from circuitpy_septic_tank.gascard import Gascard
 from circuitpy_mcu.DFRobot_PH import DFRobot_PH
 import adafruit_mcp9600
@@ -111,6 +112,8 @@ def main():
     if AIO:
         # Networking Setup
         mcu.wifi.connect()
+        # keys should really not be hard coded here, but doing it to minimise risk of failed OTA
+        istate = Initial_state_streamer(mcu.wifi.requests, access_key="ist_pSQHTVGLMEUNuUsyICrOyQLEosB-iQNn", bucket_key="3HWERLQEUFEF")
         if mcu.aio_setup(aio_group=f'{AIO_GROUP}-{mcu.id}'):
             mcu.display_text('Subscribing to feeds')
             mcu.aio_subscribe('pump1-speed')
@@ -542,10 +545,14 @@ def main():
     if mcu.aio is None:
         set_countdown_alarm(minutes=1)
 
+    timer_A = 0
     while True:
         mcu.watchdog_feed()
         mcu.read_serial(send_to=usb_serial_parser)
 
+        if time.monotonic() - timer_A > 30:
+            timer_A = time.monotonic()
+            istate.send_data(mcu.data)
 
         if AIO:
             mcu.aio_sync(mcu.data, publish_interval=30)
