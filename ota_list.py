@@ -1,9 +1,10 @@
 {
   "f627" : {
       "/circuitpy_mcu/mcu.py" : "https://raw.githubusercontent.com/calcut/circuitpy_mcu/v2.0.0/mcu.py",
+      "/circuitpy_mcu/initial_state.py" : "https://raw.githubusercontent.com/calcut/circuitpy_mcu/notecard/initial_state.py",
       "/circuitpy_mcu/aio.py" : "https://raw.githubusercontent.com/calcut/circuitpy_mcu/v2.0.0/aio.py",
       "/circuitpy_septic_tank/gascard.py" : "https://raw.githubusercontent.com/calcut/circuitpy_septic_tank/v2.0.0/gascard.py",
-      "/circuitpy_septic_tank/septic_tank.py" : "https://raw.githubusercontent.com/calcut/circuitpy_septic_tank/v2.0.0/septic_tank.py"
+      "/circuitpy_septic_tank/septic_tank.py" : "https://raw.githubusercontent.com/calcut/circuitpy_septic_tank/istate_patch/septic_tank.py"
   },
   "f247" : {
       "/circuitpy_mcu/mcu.py" : "https://raw.githubusercontent.com/calcut/circuitpy_mcu/v2-dev-offline/mcu.py",
