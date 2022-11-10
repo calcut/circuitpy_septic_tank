@@ -1,8 +1,7 @@
 import time
 from circuitpy_mcu.mcu import Mcu
+from circuitpy_mcu.notecard_manager import Notecard_manager
 from circuitpy_mcu.ota_bootloader import reset, enable_watchdog
-from circuitpy_mcu.display import LCD_20x4
-from circuitpy_mcu.aio import Aio_http
 from circuitpy_septic_tank.gascard import Gascard
 from circuitpy_mcu.DFRobot_PH import DFRobot_PH
 import adafruit_mcp9600
@@ -20,22 +19,12 @@ __version__ = "2.0.0_rtc"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
 __filename__ = "septic_tank.py"
 
-# Set AIO = True to use Wifi and Adafruit IO connection
-# secrets.py file needs to be setup appropriately
-AIO = True
-# AIO = False
 
-# GASCARD_PUMP_TIME = 20 #20 seconds
-GASCARD_PUMP_TIME = 4*60 #4 minutes
-GASCARD_INTERVAL = 4 #hours
-GASCARD = True
-# GASCARD = False
+# MINUTES = 60
+MINUTES = 1
 
-NUM_PUMPS = 2
-PH_CHANNELS = 1
-AIO_GROUP = 'boness'
-LOGLEVEL = logging.INFO
-# LOGLEVEL = logging.DEBUG
+# LOGLEVEL = logging.INFO
+LOGLEVEL = logging.DEBUG
 
 # DELETE_ARCHIVE = False
 DELETE_ARCHIVE = True
@@ -46,18 +35,35 @@ pumps_out = []
 
 def main():
 
-    # defaults, will be overwritten if connected to AIO
-    pump_speeds = [0.6, 0.6, 0.6]
+    # set defaults for environment variables, (to be overridden by notehub)
+    environment = {
+        'pump1-speed'           : "0.6",
+        'pump2-speed'           : "0.6",
+        'pump3-speed'           : "0.6",
+        'gascard'               : True,
+        'next-gc-sample'        : "10:00",
+        'gascard-pump-time'     : 240,# 4 minutes
+        'gascard-interval'      : 4, # 4 hours
+        'gascard-pump-sequence' : [1,2],
+        'num-pumps'             : 2,
+        'ph-channels'           : 1,
+        }
+
+    pump_speeds = [0, 0, 0]
+    pump_speeds[0] = float(environment['pump1-speed'])
+    pump_speeds[1] = float(environment['pump2-speed'])
+    pump_speeds[2] = float(environment['pump3-speed'])
     pump_index = 1
-    gc_pump_time = GASCARD_PUMP_TIME
-    gc_interval = GASCARD_INTERVAL
-    gc_pump_sequence = [1,2]
+    gc_pump_time = environment['gascard-pump-time']
+    gc_interval = environment['gascard-interval']
+    gc_pump_sequence = environment['gascard-pump-sequence']
     gc_sequence_index = 0
 
     # Optional list of expected I2C devices and addresses
     # Maybe useful for automatic configuration in future
     i2c_dict = {
         '0x0B' : 'Battery Monitor LC709203', # Built into ESP32S2 feather 
+        '0x17' : 'BluesWireless Notecard', 
         '0x48' : 'ADC for pH Probes ADC1115',
         '0x60' : 'Thermocouple Amp MCP9600',
         '0x61' : 'Thermocouple Amp MCP9600',
@@ -79,26 +85,27 @@ def main():
     timer_sd = 0
 
     # instantiate the MCU helper class to set up the system
-    mcu = Mcu(loglevel=LOGLEVEL)
-    mcu.booting = True # A flag to record boot messages
+    mcu = Mcu(loglevel=LOGLEVEL, i2c_freq=100000)
+    
+    # Check what devices are present on the i2c bus
+    mcu.i2c_identify(i2c_dict)
+    mcu.attach_display_sparkfun_20x4(i2c2=True)
+    mcu.display_text("testing")
+
+    ncm = Notecard_manager(loghandler=mcu.loghandler, i2c=mcu.i2c, watchdog=120, loglevel=LOGLEVEL)
+
     mcu.log.info(f'STARTING {__filename__} {__version__}')
 
     # Use the Adalogger RTC chip rather than ESP32-S2 RTC
     mcu.attach_rtc_pcf8523()
+    ncm.rtc = mcu.rtc
+    ncm.sync_time()
 
-    # Check what devices are present on the i2c bus
-    mcu.i2c_identify(i2c_dict)
+    ncm.set_default_envs(environment)
 
-    try:
-        display = LCD_20x4(mcu.i2c)
-        mcu.attach_display(display) # to show wifi/AIO status etc.
-        display.show_text(__filename__) # shows current filename
-        time.sleep(1)
-        mcu.log.info(f'found Display')
-    except Exception as e:
-        mcu.handle_exception(e)
-        display = None
 
+
+    mcu.attach_display_sparkfun_20x4()
         
     mcu.attach_sdcard()
     if DELETE_ARCHIVE:
@@ -107,18 +114,6 @@ def main():
     mcu.archive_file('data.txt')
     mcu.watchdog_feed()
 
-
-    if AIO:
-        # Networking Setup
-        mcu.wifi.connect()
-        if mcu.aio_setup(aio_group=f'{AIO_GROUP}-{mcu.id}'):
-            mcu.display_text('Subscribing to feeds')
-            mcu.aio_subscribe('pump1-speed')
-            mcu.aio_subscribe('pump2-speed')
-            mcu.aio_subscribe('pump3-speed')
-            mcu.aio_subscribe('next-gc-sample')
-            mcu.aio_subscribe('gc-interval')
-            mcu.aio_subscribe('gc-pump-time')
 
     def connect_thermocouple_channels():
         tc_addresses = [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67]
@@ -141,8 +136,8 @@ def main():
             ads = ADS.ADS1115(mcu.i2c)
             adc_list = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]
 
-            # Drop any unwanted/unused channels, as specified by PH_CHANNELS
-            adc_list = adc_list[:PH_CHANNELS] 
+            # Drop any unwanted/unused channels, as specified by ph-channels environment variable
+            adc_list = adc_list[:environment['ph-channels']] 
 
             for ch in adc_list:
                 ph_channel = DFRobot_PH(
@@ -164,14 +159,14 @@ def main():
             global pumps_in
             global pumps_out
             # Changing pwm freq from 1600Hz to <500Hz helps a lot with matching speeds. unsure exactly why. 
-            pump_driver_out = MotorKit(i2c=mcu.i2c, address=0x6E, pwm_frequency=400)
-            pump_driver_in = MotorKit(i2c=mcu.i2c, address=0x6F, pwm_frequency=400)
+            pump_driver_out = MotorKit(i2c=mcu.i2c2, address=0x6E, pwm_frequency=400)
+            pump_driver_in = MotorKit(i2c=mcu.i2c2, address=0x6F, pwm_frequency=400)
             pumps_in = [pump_driver_in.motor1, pump_driver_in.motor2, pump_driver_in.motor3, pump_driver_in.motor4]
             pumps_out = [pump_driver_out.motor1, pump_driver_out.motor2, pump_driver_out.motor3, pump_driver_out.motor4]
 
-            # Drop any unused pumps as defined by the NUM_PUMPS parameter
-            pumps_in = pumps_in[:NUM_PUMPS]
-            pumps_out = pumps_out[:NUM_PUMPS]
+            # Drop any unused pumps as defined by the num-pumps environment variable
+            pumps_in = pumps_in[:environment['num-pumps']]
+            pumps_out = pumps_out[:environment['num-pumps']]
 
             for p in pumps_in:
                 p.throttle = 0
@@ -189,7 +184,7 @@ def main():
             uart = busio.UART(board.TX, board.RX, baudrate=57600)
             gc = Gascard(uart)
             gc.log.addHandler(mcu.loghandler)
-            gc.log.setLevel(LOGLEVEL)
+            gc.log.setLevel(logging.INFO)
             mcu.watchdog_feed() #gascard startup can take a while
             gc.poll_until_ready()
             mcu.watchdog_feed() #gascard startup can take a while
@@ -222,80 +217,81 @@ def main():
     ph_channels = connect_ph_channels()
     connect_pumps()
 
-    if display:
-        display.clear()
-        display.write(f'{len(tc_channels)} TC channels')
-        display.set_cursor(0,1)
-        display.write(f'{len(ph_channels)} pH channels')
-        display.set_cursor(0,2)
-        display.write(f'{len(pumps_in)} air pumps')
-        display.set_cursor(0,3)
-        display.write(f'Waiting for gascard')
+    if mcu.display:
+        mcu.display.clear()
+        mcu.display.write(f'{len(tc_channels)} TC channels')
+        mcu.display.set_cursor(0,1)
+        mcu.display.write(f'{len(ph_channels)} pH channels')
+        mcu.display.set_cursor(0,2)
+        mcu.display.write(f'{len(pumps_in)} air pumps')
+        mcu.display.set_cursor(0,3)
+        mcu.display.write(f'Waiting for gascard')
 
-    if GASCARD:
+    if environment['gascard']:
         gc = connect_gascard()
     else:
         gc = None
 
     # Display gascard info
-    if display:
+    if mcu.display:
         if gc:
-            display.clear()
-            display.write(f'Gascard Found')
+            mcu.display.clear()
+            mcu.display.write(f'Gascard Found')
         else:
-            display.clear()
-            display.write(f'Gascard not used')
+            mcu.display.clear()
+            mcu.display.write(f'Gascard not used')
         time.sleep(1)
 
 
-    def parse_feeds():
+    def parse_environment():
+
         nonlocal gc_interval
         nonlocal gc_pump_time
 
-        if mcu.aio is not None:
-            for feed_id in mcu.aio.updated_feeds.keys():
-                payload = mcu.aio.updated_feeds.pop(feed_id)
+        for key in ncm.environment.keys():
+            val = ncm.environment.pop(key)
+            mcu.log.info(f"environment update: {key} = {val}")
 
-                if feed_id == 'led-color':
-                    r = int(payload[1:3], 16)
-                    g = int(payload[3:5], 16)
-                    b = int(payload[5:], 16)
-                    display.set_fast_backlight_rgb(r, g, b)
+            if key == 'led-color':
+                r = int(val[1:3], 16)
+                g = int(val[3:5], 16)
+                b = int(val[5:], 16)
+                mcu.display.set_fast_backlight_rgb(r, g, b)
 
-                if feed_id == f'pump1-speed':
-                    pump_speeds[0] = float(payload)
-                if feed_id == f'pump2-speed':
-                    pump_speeds[1] = float(payload)
-                if feed_id == f'pump3-speed':
-                    pump_speeds[2] = float(payload)
+            if key == f'pump1-speed':
+                pump_speeds[0] = float(val)
+            if key == f'pump2-speed':
+                pump_speeds[1] = float(val)
+            if key == f'pump3-speed':
+                pump_speeds[2] = float(val)
 
-                if feed_id == 'gc-sample-interval':
-                    gc_interval = int(payload)
-                    mcu.log.info(f'setting {gc_interval=} hours')
+            if key == 'gc-sample-interval':
+                gc_interval = int(val)
+                mcu.log.info(f'setting {gc_interval=} hours')
 
-                if feed_id == 'gc-pump-time':
-                    gc_pump_time = int(payload)
-                    mcu.log.info(f'setting {gc_pump_time=} seconds')
+            if key == 'gc-pump-time':
+                gc_pump_time = int(val)
+                mcu.log.info(f'setting {gc_pump_time=} seconds')
 
-                if feed_id == 'next-gc-sample':
-                    ns = payload.split(':')
-                    if len(ns) == 2:
-                        hour = int(ns[0])
-                        minute = int(ns[1])
-                        a = mcu.rtc.alarm[0]
+            if key == 'next-gc-sample':
+                ns = val.split(':')
+                if len(ns) == 2:
+                    hour = int(ns[0])
+                    minute = int(ns[1])
+                    a = mcu.rtc.alarm[0]
 
-                        # only update if there is a change
-                        if (hour != a.tm_hour) or (minute != a.tm_min):
-                            set_alarm(hour, minute)
-                    else:
-                        mcu.log.error(f"Couldn't parse next-flow {payload}")                    
+                    # only update if there is a change
+                    if (hour != a.tm_hour) or (minute != a.tm_min):
+                        set_alarm(hour, minute)
+                else:
+                    mcu.log.error(f"Couldn't parse next-flow {val}")                    
 
-                if feed_id == 'ota':
-                    for p in pumps_in:
-                        p.throttle = 0
-                    for p in pumps_out:
-                        p.throttle = 0
-                    mcu.ota_reboot()
+            if key == 'ota':
+                for p in pumps_in:
+                    p.throttle = 0
+                for p in pumps_out:
+                    p.throttle = 0
+                mcu.ota_reboot()
 
     def log_sdcard(interval=30):
         nonlocal timer_sd
@@ -402,10 +398,6 @@ def main():
                     timer_pump = time.monotonic()
                     mcu.log.warning(f'GC sampling sequence: running pump {pump_index} at {speed=}')
 
-
-
-
-        
         display_summary()
 
     def filter_data(filter_string=None, decimal_places=1):
@@ -455,43 +447,46 @@ def main():
             print('Leaving Calibration Mode')
 
     def display_summary():
-        if display:
-            if len(pumps_in) > 0:
-                display.set_cursor(0,0)
-                line = f'pump{pump_index}={pumps_in[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C         '
-                display.write(line[:20])
+        try:
+            if mcu.display:
+                if len(pumps_in) > 0:
+                    mcu.display.set_cursor(0,0)
+                    line = f'pump{pump_index}={pumps_in[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C         '
+                    mcu.display.write(line[:20])
 
-            if gc:
-                display.set_cursor(0,1)
-                line = ''
-                data = filter_data('debug-concentration', decimal_places=4)
+                if gc:
+                    mcu.display.set_cursor(0,1)
+                    line = ''
+                    data = filter_data('debug-concentration', decimal_places=4)
+                    for key in sorted(data):
+                        # display as float with max 4 decimal places, and max 7 chars long
+                            line += f' {data[key]:.4f}'[:7]
+                    line = line[1:] #drop the first space, to keep within 20 chars
+                    mcu.display.write(line[:20])
+
+                mcu.display.set_cursor(0,2)
+                line = 'tc'
+                data = filter_data('tc', decimal_places=1)
+                data.pop('tc4', None) # Remove the ambient temperature thermocouple
                 for key in sorted(data):
-                    # display as float with max 4 decimal places, and max 7 chars long
-                        line += f' {data[key]:.4f}'[:7]
-                line = line[1:] #drop the first space, to keep within 20 chars
-                display.write(line[:20])
+                    line+= f' {data[key]:3.1f}'
+                mcu.display.write(line[:20])
 
-            display.set_cursor(0,2)
-            line = 'tc'
-            data = filter_data('tc', decimal_places=1)
-            data.pop('tc4', None) # Remove the ambient temperature thermocouple
-            for key in sorted(data):
-                line+= f' {data[key]:3.1f}'
-            display.write(line[:20])
-
-            display.set_cursor(0,3)
-            line = 'ph'
-            data = filter_data('ph', decimal_places=2)
-            for key in sorted(data):
-                line+= f' {data[key]:3.2f}'
-            display.write(line[:20])
+                mcu.display.set_cursor(0,3)
+                line = 'ph'
+                data = filter_data('ph', decimal_places=2)
+                for key in sorted(data):
+                    line+= f' {data[key]:3.2f}'
+                mcu.display.write(line[:20])
+        except Exception as e:
+            mcu.log.warning(f"{e}")
 
     def display_gascard_reading():
-        display.labels[0]='CH4 Conc='
-        display.labels[1]='Pressure='
-        display.values[0] = f'{gc.concentration:7.4f}%'
-        display.values[1] = f'{gc.pressure:6.1f} '
-        display.show_data_long()
+        mcu.display.labels[0]='CH4 Conc='
+        mcu.display.labels[1]='Pressure='
+        mcu.display.values[0] = f'{gc.concentration:7.4f}%'
+        mcu.display.values[1] = f'{gc.pressure:6.1f} '
+        mcu.display.show_data_long()
 
     def run_pump(index, speed=None, duration=None):
 
@@ -532,8 +527,8 @@ def main():
 
 
     mcu.log.info(f'BOOT complete at {mcu.get_timestamp()} UTC')
-    if display:
-        display.clear()
+    if mcu.display:
+        mcu.display.clear()
     mcu.booting = False # Stop accumulating boot log messages
 
     if mcu.aio is not None:
@@ -542,15 +537,11 @@ def main():
     if mcu.aio is None:
         set_countdown_alarm(minutes=1)
 
+    timer_A=0
+    timer_B=0
+    timer_C=0
     while True:
-        mcu.watchdog_feed()
-        mcu.read_serial(send_to=usb_serial_parser)
-
-
-        if AIO:
-            mcu.aio_sync(mcu.data, publish_interval=30)
-            parse_feeds()
-
+        mcu.service(serial_parser=usb_serial_parser)
         capture_data(interval=1)
         log_sdcard(interval=30)
 
@@ -560,9 +551,35 @@ def main():
             # if gc.mode != 'Normal Channel':
             #     print(data_string)
 
+        if time.monotonic() - timer_A > 1:
+            timer_A = time.monotonic()
+            mcu.led.value = not mcu.led.value #heartbeat LED
+
+        if time.monotonic() - timer_B > (1 * MINUTES):
+            timer_B = time.monotonic()
+            timestamp = mcu.get_timestamp()
+            mcu.log.debug(f"servicing notecard now {timestamp}")
+            ncm.add_to_timestamped_note(mcu.data)
+
+            # # check for any new inbound notes to parse
+            # ncm.receive_note()
+            # parse_inbound_note()
+
+            # check for any environment variable updates to parse
+            ncm.receive_environment()
+            parse_environment()
+
+        if time.monotonic() - timer_C > (15 * MINUTES):
+            timer_C = time.monotonic()
+
+            # Send note infrequently (e.g. 15 mins) to minimise consumption credit usage
+            ncm.send_timestamped_note(sync=True)
+            ncm.send_timestamped_log(sync=True)
+
+
 if __name__ == "__main__":
     try:
-        enable_watchdog(timeout=60)
+        enable_watchdog(timeout=120)
         main()
     except KeyboardInterrupt:
         print('Code Stopped by Keyboard Interrupt')
