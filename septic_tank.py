@@ -96,6 +96,7 @@ def main():
     mcu.i2c_identify(i2c_dict)
     mcu.i2c_identify(i2c2_dict, i2c=mcu.i2c2)
     mcu.attach_display_sparkfun_20x4()
+    mcu.display_text("testing")
 
     ncm = Notecard_manager(loghandler=mcu.loghandler, i2c=mcu.i2c, watchdog=120, loglevel=LOGLEVEL)
 
@@ -112,7 +113,7 @@ def main():
     if DELETE_ARCHIVE:
         mcu.delete_archive()
     mcu.archive_file('log.txt')
-    mcu.archive_file('data.txt')
+    # mcu.archive_file('data.txt')
     mcu.watchdog_feed()
 
 
@@ -540,11 +541,11 @@ def main():
 
     timer_A=0
     timer_B=0
-    timer_C=0
+    timer_C=-15*MINUTES
     while True:
         mcu.service(serial_parser=usb_serial_parser)
         capture_data(interval=1)
-        log_sdcard(interval=60)
+        # log_sdcard(interval=60)
 
         # Check for incoming serial messages from Gascard
         if gc:
