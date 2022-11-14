@@ -20,8 +20,8 @@ __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
 __filename__ = "septic_tank.py"
 
 
-# MINUTES = 60
-MINUTES = 1
+MINUTES = 60
+# MINUTES = 1
 
 # LOGLEVEL = logging.INFO
 LOGLEVEL = logging.DEBUG
@@ -64,20 +64,24 @@ def main():
     i2c_dict = {
         '0x0B' : 'Battery Monitor LC709203', # Built into ESP32S2 feather 
         '0x17' : 'BluesWireless Notecard', 
+        '0x68' : 'Realtime Clock PCF8523', # On Adalogger Featherwing
+        '0x72' : 'Sparkfun LCD Display',
+        # '0x77' : 'Temp/Humidity/Pressure BME280' # Built into some ESP32S2 feathers 
+    }
+
+    i2c2_dict = {
         '0x48' : 'ADC for pH Probes ADC1115',
-        '0x60' : 'Thermocouple Amp MCP9600',
-        '0x61' : 'Thermocouple Amp MCP9600',
-        '0x62' : 'Thermocouple Amp MCP9600',
-        '0x63' : 'Thermocouple Amp MCP9600',
+        # '0x60' : 'Thermocouple Amp MCP9600',
+        # '0x61' : 'Thermocouple Amp MCP9600',
+        # '0x62' : 'Thermocouple Amp MCP9600',
+        # '0x63' : 'Thermocouple Amp MCP9600',
         '0x64' : 'Thermocouple Amp MCP9600',
         '0x65' : 'Thermocouple Amp MCP9600',
         '0x66' : 'Thermocouple Amp MCP9600',
         '0x67' : 'Thermocouple Amp MCP9600',
-        '0x68' : 'Realtime Clock PCF8523', # On Adalogger Featherwing
         '0x6E' : 'Motor Featherwing PCA9685', #Solder bridge on address bit A1 A2 A3
         '0x6F' : 'Motor Featherwing PCA9685', #Solder bridge on address bit A0 A1 A2 A3
-        '0x72' : 'Sparkfun LCD Display',
-        # '0x77' : 'Temp/Humidity/Pressure BME280' # Built into some ESP32S2 feathers 
+        '0x70' : 'PCA9685 (All Call)', #Combined "All Call" address (not supported)
     }
 
     timer_pump = gc_interval*60*60*10
@@ -86,11 +90,12 @@ def main():
 
     # instantiate the MCU helper class to set up the system
     mcu = Mcu(loglevel=LOGLEVEL, i2c_freq=100000)
+    mcu.enable_i2c2()
     
     # Check what devices are present on the i2c bus
     mcu.i2c_identify(i2c_dict)
-    mcu.attach_display_sparkfun_20x4(i2c2=True)
-    mcu.display_text("testing")
+    mcu.i2c_identify(i2c2_dict, i2c=mcu.i2c2)
+    mcu.attach_display_sparkfun_20x4()
 
     ncm = Notecard_manager(loghandler=mcu.loghandler, i2c=mcu.i2c, watchdog=120, loglevel=LOGLEVEL)
 
@@ -103,10 +108,6 @@ def main():
 
     ncm.set_default_envs(environment)
 
-
-
-    mcu.attach_display_sparkfun_20x4()
-        
     mcu.attach_sdcard()
     if DELETE_ARCHIVE:
         mcu.delete_archive()
@@ -121,7 +122,7 @@ def main():
 
         for addr in tc_addresses:
             try:
-                tc = adafruit_mcp9600.MCP9600(mcu.i2c, address=addr)
+                tc = adafruit_mcp9600.MCP9600(mcu.i2c2, address=addr)
                 tc_channels.append(tc)
                 mcu.log.info(f'Found thermocouple channel at address {addr:x}')
                 
@@ -133,7 +134,7 @@ def main():
     def connect_ph_channels():
         try:
             ph_channels = []
-            ads = ADS.ADS1115(mcu.i2c)
+            ads = ADS.ADS1115(mcu.i2c2)
             adc_list = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]
 
             # Drop any unwanted/unused channels, as specified by ph-channels environment variable
@@ -543,7 +544,7 @@ def main():
     while True:
         mcu.service(serial_parser=usb_serial_parser)
         capture_data(interval=1)
-        log_sdcard(interval=30)
+        log_sdcard(interval=60)
 
         # Check for incoming serial messages from Gascard
         if gc:
