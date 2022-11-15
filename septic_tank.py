@@ -29,6 +29,9 @@ LOGLEVEL = logging.DEBUG
 # DELETE_ARCHIVE = False
 DELETE_ARCHIVE = True
 
+# PUMP_IMMEDIATELY = True
+PUMP_IMMEDIATELY = False
+
 # global variable so pumps can be shut down after keyboard interrupt
 pumps_in = []
 pumps_out = []
@@ -73,13 +76,6 @@ def main():
                 b = int(val[5:], 16)
                 mcu.display.set_fast_backlight_rgb(r, g, b)
 
-            if key == f'pump1-speed':
-                pump_speeds[0] = val
-            if key == f'pump2-speed':
-                pump_speeds[1] = val
-            if key == f'pump3-speed':
-                pump_speeds[2] = val
-
             if key == 'next-gc-sample':
                 ns = val.split(':')
                 if len(ns) == 2:
@@ -101,7 +97,6 @@ def main():
                     p.throttle = 0
                 mcu.ota_reboot()
 
-    pump_speeds = [0, 0, 0, 0]
     pump_index = 1 # track which pump is active
     gc_sequence_index = 0 #track position in the gc_pump_sequence list
 
@@ -142,7 +137,6 @@ def main():
     mcu.i2c_identify(i2c_dict)
     mcu.i2c_identify(i2c2_dict, i2c=mcu.i2c2)
     mcu.attach_display_sparkfun_20x4()
-    mcu.display_text("testing")
 
     ncm = Notecard_manager(loghandler=mcu.loghandler, i2c=mcu.i2c, watchdog=120, loglevel=LOGLEVEL)
 
@@ -349,7 +343,7 @@ def main():
                 set_countdown_alarm(hours=env['gc-sample-interval'])
 
                 pump_index = env['gc-pump-sequence'][gc_sequence_index]
-                speed = pump_speeds[pump_index-1]
+                speed = env[f'pump{pump_index}-speed']
                 pumps_in[pump_index-1].throttle = speed
                 pumps_out[pump_index-1].throttle = speed
                 timer_pump = time.monotonic()
@@ -375,7 +369,7 @@ def main():
 
                 else:
                     pump_index = env['gc-pump-sequence'][gc_sequence_index]
-                    speed = pump_speeds[pump_index-1]
+                    speed = env[f'pump{pump_index}-speed']
                     pumps_in[pump_index-1].throttle = speed
                     pumps_out[pump_index-1].throttle = speed
                     timer_pump = time.monotonic()
@@ -513,6 +507,9 @@ def main():
     if mcu.display:
         mcu.display.clear()
     mcu.booting = False # Stop accumulating boot log messages
+
+    if PUMP_IMMEDIATELY:
+        set_countdown_alarm(minutes=1)
 
     timer_A=0
     timer_B=0
