@@ -49,14 +49,23 @@ def main():
         'ph-channels'           : 1,
         }
 
+
+    def set_alarm(hour=0, minute=1, repeat="daily"):
+        # NB setting alarm seconds is not supported by the hardware
+        alarm_time = time.struct_time((2000,1,1,hour,minute,0,0,1,-1))
+        mcu.rtc.alarm = (alarm_time, repeat)
+        mcu.log.warning(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
+
+    def set_countdown_alarm(hours=0, minutes=0, repeat="daily"):
+        # NB setting alarm seconds is not supported by the hardware
+        posix_time = time.mktime(mcu.rtc.datetime)
+        alarm_time = time.localtime(posix_time + int(minutes*60) + int(hours*60*60))
+        mcu.rtc.alarm = (alarm_time, repeat)
+        mcu.log.warning(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
+
     def parse_environment():
 
-        nonlocal env
-
-        for key in ncm.environment.keys():
-            val = ncm.environment.pop(key)
-            mcu.log.debug(f"environment update: {key} = {val}")
-            env[key] = 
+        for key, val in env.items():
 
             if key == 'led-color':
                 r = int(val[1:3], 16)
@@ -65,37 +74,11 @@ def main():
                 mcu.display.set_fast_backlight_rgb(r, g, b)
 
             if key == f'pump1-speed':
-                env[key] = float(val)
-                pump_speeds[0] = float(val)
+                pump_speeds[0] = val
             if key == f'pump2-speed':
-                env[key] = float(val)
-                pump_speeds[1] = float(val)
+                pump_speeds[1] = val
             if key == f'pump3-speed':
-                env[key] = float(val)
-                pump_speeds[2] = float(val)
-
-            if key == 'gascard':
-                if val == 'False':
-                    env[key] = False
-                elif val == 'True':
-                    env[key] = True
-                else:
-                    mcu.log.warning(f"Couldn't parse {val}, please use True or False")
-
-            if key == 'gc-sample-interval':
-                env[key] = int(val)
-                mcu.log.info(f'setting {key}={env[key]} hours')
-
-            if key == 'gc-pump-time':
-                env[key] = int(val)
-                mcu.log.info(f'setting {key}={env[key]} seconds')
-
-            if key == 'gc-pump-sequence':
-                if (val[0] == "[") and (val[-1] == "]"):
-                    env[key] = eval(val)
-                    mcu.log.info(f'setting {key}={env[key]}')
-                else:
-                    mcu.log.warning(f"Couldn't parse {val}, please format as list of integers")
+                pump_speeds[2] = val
 
             if key == 'next-gc-sample':
                 ns = val.split(':')
@@ -110,11 +93,6 @@ def main():
                         set_alarm(hour, minute)
                 else:
                     mcu.log.error(f"Couldn't parse next-flow {val}")
-
-            if key=='ph-channels' or key=='num-pumps':
-                env[key] = int(val)   
-                mcu.log.info(f'setting {key}={env[key]}')
-
 
             if key == 'ota':
                 for p in pumps_in:
@@ -267,18 +245,6 @@ def main():
 
         return gc
 
-    def set_alarm(hour=0, minute=1, repeat="daily"):
-        # NB setting alarm seconds is not supported by the hardware
-        alarm_time = time.struct_time((2000,1,1,hour,minute,0,0,1,-1))
-        mcu.rtc.alarm = (alarm_time, repeat)
-        mcu.log.warning(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
-
-    def set_countdown_alarm(hours=0, minutes=0, repeat="daily"):
-        # NB setting alarm seconds is not supported by the hardware
-        posix_time = time.mktime(mcu.rtc.datetime)
-        alarm_time = time.localtime(posix_time + int(minutes*60) + int(hours*60*60))
-        mcu.rtc.alarm = (alarm_time, repeat)
-        mcu.log.warning(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
 
     tc_channels = connect_thermocouple_channels()
     ph_channels = connect_ph_channels()
@@ -577,8 +543,8 @@ def main():
             # parse_inbound_note()
 
             # check for any environment variable updates to parse
-            ncm.receive_environment()
-            parse_environment()
+            if ncm.receive_environment(env):
+                parse_environment()
 
         if time.monotonic() - timer_C > (15 * MINUTES):
             timer_C = time.monotonic()
