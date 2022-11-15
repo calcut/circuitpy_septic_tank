@@ -50,6 +50,7 @@ def main():
         'gc-pump-sequence'      : [1,2],
         'num-pumps'             : 2,
         'ph-channels'           : 1,
+        'ota'                   : __version__
         }
 
 
@@ -91,11 +92,14 @@ def main():
                     mcu.log.error(f"Couldn't parse next-flow {val}")
 
             if key == 'ota':
-                for p in pumps_in:
-                    p.throttle = 0
-                for p in pumps_out:
-                    p.throttle = 0
-                mcu.ota_reboot()
+                if val == __version__:
+                    mcu.log.info(f"Not performing OTA, version matches {val}")
+                else:
+                    for p in pumps_in:
+                        p.throttle = 0
+                    for p in pumps_out:
+                        p.throttle = 0
+                    mcu.ota_reboot()
 
     pump_index = 1 # track which pump is active
     gc_sequence_index = 0 #track position in the gc_pump_sequence list
