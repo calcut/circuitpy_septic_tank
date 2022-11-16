@@ -59,6 +59,7 @@ def main():
         alarm_time = time.struct_time((2000,1,1,hour,minute,0,0,1,-1))
         mcu.rtc.alarm = (alarm_time, repeat)
         mcu.log.warning(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
+        ncm.set_default_envs({"next-gc-sample" : f"{alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}"}, clear=False)
 
     def set_countdown_alarm(hours=0, minutes=0, repeat="daily"):
         # NB setting alarm seconds is not supported by the hardware
@@ -66,6 +67,7 @@ def main():
         alarm_time = time.localtime(posix_time + int(minutes*60) + int(hours*60*60))
         mcu.rtc.alarm = (alarm_time, repeat)
         mcu.log.warning(f"alarm set for {alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}:00")
+        ncm.set_default_envs({"next-gc-sample" : f"{alarm_time.tm_hour:02d}:{alarm_time.tm_min:02d}"}, clear=False)
 
     def parse_environment():
 
@@ -362,7 +364,7 @@ def main():
 
                 pumps_in[pump_index-1].throttle = 0
                 pumps_out[pump_index-1].throttle = 0  
-                mcu.log.info(f'disabling pump{pump_index} after {env["gc-pump-time"]=}')
+                mcu.log.info(f'disabling pump{pump_index} after {env["gc-pump-time"]}s')
 
                 gc_sequence_index += 1
                 if gc_sequence_index >= len(env['gc-pump-sequence']) :
