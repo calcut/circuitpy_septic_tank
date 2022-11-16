@@ -23,8 +23,8 @@ __filename__ = "septic_tank.py"
 MINUTES = 60
 # MINUTES = 1
 
-# LOGLEVEL = logging.INFO
-LOGLEVEL = logging.DEBUG
+LOGLEVEL = logging.INFO
+# LOGLEVEL = logging.DEBUG
 
 # DELETE_ARCHIVE = False
 DELETE_ARCHIVE = True
@@ -143,15 +143,18 @@ def main():
     mcu.i2c_identify(i2c_dict)
     mcu.i2c_identify(i2c2_dict, i2c=mcu.i2c2)
     mcu.attach_display_sparkfun_20x4()
+    mcu.attach_rtc_pcf8523()
 
     ncm = Notecard_manager(loghandler=mcu.loghandler, i2c=mcu.i2c, watchdog=120, loglevel=LOGLEVEL)
-
     mcu.log.info(f'STARTING {__filename__} {__version__}')
 
     # Use the Adalogger RTC chip rather than ESP32-S2 RTC
-    mcu.attach_rtc_pcf8523()
     ncm.rtc = mcu.rtc
     ncm.sync_time()
+
+    # Try to get existing alarm from the RTC rather than using the default.
+    alarm = mcu.rtc.alarm[0]
+    env['next-gc-sample'] = f"{alarm.tm_hour:02d}:{alarm.tm_min:02d}"
 
     ncm.set_default_envs(env)
     parse_environment()
