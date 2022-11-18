@@ -41,7 +41,7 @@ def main():
         'pump2-speed'           : 0.6,
         'pump3-speed'           : 0.6,
         'gascard'               : True,
-        'gc-sample-times'       : ["02:00" "06:00", "10:00", "14:00", "18:00", "22:00"],
+        'gc-sample-times'       : ["02:00", "06:00", "10:00", "14:00", "18:00", "22:00"],
         'gc-pump-time'          : 240,# 4 minutes
         'gc-pump-sequence'      : [1,2],
         'num-pumps'             : 2,
