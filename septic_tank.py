@@ -365,7 +365,8 @@ def main():
             if mcu.display:
                 if len(pumps_in) > 0:
                     mcu.display.set_cursor(0,0)
-                    line = f'pump{pump_index}={pumps_in[pump_index-1].throttle}  {mcu.data["tc4"]:3.1f}C         '
+                    t = mcu.rtc.datetime
+                    line = f'p{pump_index}={pumps_in[pump_index-1].throttle} {mcu.data["tc4"]:3.1f}C {t.tm_hour:02}{t.tm_min:02}:{t.tm_sec:02}'
                     mcu.display.write(line[:20])
 
                 if gc:
@@ -375,7 +376,7 @@ def main():
                     for key in sorted(data):
                         # display as float with max 4 decimal places, and max 7 chars long
                         line += f' {data[key]:.4f}'[:7]
-                    line += f" Next@{next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}"
+                    line += f" Next@{next_gc_sample.tm_hour:02d}{next_gc_sample.tm_min:02d}"
                     mcu.display.write(line[:20])
 
                 mcu.display.set_cursor(0,2)
