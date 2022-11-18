@@ -446,7 +446,8 @@ def main():
 
     timer_A=0
     timer_B=0
-    timer_C=-15*MINUTES
+    timer_C=0
+    timer_D=-15*MINUTES
     while True:
         mcu.service(serial_parser=usb_serial_parser)
         capture_data(interval=1)
@@ -463,11 +464,15 @@ def main():
 
         if time.monotonic() - timer_B > (1 * MINUTES):
             timer_B = time.monotonic()
-            timestamp = mcu.get_timestamp()
-            mcu.log.debug(f"servicing notecard now {timestamp}")
             ncm.add_to_timestamped_note(mcu.data)
 
-            # # check for any new inbound notes to parse
+        if time.monotonic() - timer_C > 5:
+            timer_C = time.monotonic()
+
+            timestamp = mcu.get_timestamp()
+            mcu.log.debug(f"servicing notecard now {timestamp}")
+
+            # check for any new inbound notes to parse
             # ncm.receive_note()
             # parse_inbound_note()
 
@@ -475,8 +480,8 @@ def main():
             if ncm.receive_environment(env):
                 parse_environment()
 
-        if time.monotonic() - timer_C > (15 * MINUTES):
-            timer_C = time.monotonic()
+        if time.monotonic() - timer_D > (15 * MINUTES):
+            timer_D = time.monotonic()
 
             # Send note infrequently (e.g. 15 mins) to minimise consumption credit usage
             ncm.send_timestamped_note(sync=True)
