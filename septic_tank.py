@@ -247,6 +247,7 @@ def main():
         nonlocal timer_gc_sample
 
         nonlocal next_gc_sample_countdown
+        nonlocal next_gc_sample
         nonlocal gc_sequence_index
         nonlocal pump_index
 
@@ -274,6 +275,8 @@ def main():
             if time.monotonic() - timer_gc_sample > next_gc_sample_countdown:
                 timer_gc_sample = time.monotonic()
                 next_gc_sample_countdown = mcu.get_next_alarm(env['gc-sample-times'])
+                next_gc_sample = time.localtime(time.time() + next_gc_sample_countdown)
+                mcu.log.warning(f"alarm set for {next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}:00")
 
                 pump_index = env['gc-pump-sequence'][gc_sequence_index]
                 speed = env[f'pump{pump_index}-speed']
