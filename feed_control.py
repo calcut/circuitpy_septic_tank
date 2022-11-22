@@ -14,18 +14,13 @@ __version__ = "3.0.0_notecard"
 __filename__ = "feed_control.py"
 __repo__ = "https://github.com/calcut/circuitpy-septic-tank"
 
-
 # global variable so valves can be shut down after keyboard interrupt
 valves = []
-# NUM_VALVES = 1
-# NUM_PULSES = 24
-# FLOW_INTERVAL= 8 #(0.0333= 2 minutes) hours until next pulse time
 
 MINUTES = 60
 
 LOGLEVEL = logging.DEBUG
 # LOGLEVEL = logging.INFO
-
 
 def main():
 
@@ -41,8 +36,6 @@ def main():
     env = {
         'pulses'                : 24, #number of pulses in a feed
         'valves'                : 1, # valves under control
-        # 'feed-interval'         : 8.0, #hours between feeds
-        # 'next-feed'             : "10:00",
         'feed-times'            : ["10:00", "18:00"],
         'valve-open-duration'   : 10, #seconds open in a pulse
         'valve-close-duration'  : 120, #seconds closed in a pulse
@@ -218,6 +211,13 @@ def main():
             mcu.log.debug(f"servicing notecard now {timestamp}")
             # ncm.add_to_timestamped_note(mcu.data)
 
+            # Checks if connected, storage availablity, etc.
+            ncm.check_status()
+            if ncm.connected:
+                mcu.pixel[0] = mcu.pixel.MAGENTA
+            else:
+                mcu.pixel[0] = mcu.pixel.RED
+
             # # check for any new inbound notes to parse
             # ncm.receive_note()
             # parse_inbound_note()
@@ -228,7 +228,7 @@ def main():
 
         if time.monotonic() - timer_C > (15 * MINUTES):
             timer_C = time.monotonic()
-            mcu.log.info('heartbeat log for debug')
+            # mcu.log.info('heartbeat log for debug')
 
             # Send note infrequently (e.g. 15 mins) to minimise consumption credit usage
             ncm.send_timestamped_note(sync=True)
