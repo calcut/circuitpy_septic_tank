@@ -366,7 +366,7 @@ def main():
                 if len(pumps_in) > 0:
                     mcu.display.set_cursor(0,0)
                     t = mcu.rtc.datetime
-                    line = f'p{pump_index}={pumps_in[pump_index-1].throttle} {mcu.data["tc4"]:3.1f}C {t.tm_hour:02}{t.tm_min:02}:{t.tm_sec:02}'
+                    line = f'p{pump_index}={pumps_in[pump_index-1].throttle} {mcu.data["tc4"]:3.1f}C {t.tm_hour:02}{t.tm_min:02}:{t.tm_sec:02}          '
                     mcu.display.write(line[:20])
 
                 if gc:

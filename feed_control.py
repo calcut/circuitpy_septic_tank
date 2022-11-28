@@ -165,7 +165,7 @@ def main():
         mcu.display.write(mcu.get_timestamp()[:20])
         mcu.display.set_cursor(0,1)
         a = next_feed
-        mcu.display.write(f'Next Feed: {a.tm_hour:02}:{a.tm_min:02}:{a.tm_sec:02}'[:20])
+        mcu.display.write(f'Next Feed: {a.tm_hour:02}:{a.tm_min:02}:{a.tm_sec:02}            '[:20])
         mcu.display.set_cursor(0,2)
         mcu.display.write(status)
         mcu.display.set_cursor(0,3)
