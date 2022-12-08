@@ -15,7 +15,7 @@ import board
 import adafruit_logging as logging
 
 
-__version__ = "3.0.1_notecard"
+__version__ = "3.1.0"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
 __filename__ = "septic_tank.py"
 
