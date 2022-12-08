@@ -41,6 +41,8 @@ def main():
         'pump2-speed'           : 0.6,
         'pump3-speed'           : 0.6,
         'gascard'               : True,
+        'ph-temp-interval'      : 1, #minutes
+        'note-send-interval'    : 30, #minutes
         'gc-sample-times'       : ["02:00", "06:00", "10:00", "14:00", "18:00", "22:00"],
         'gc-pump-time'          : 240,# 4 minutes
         'gc-pump-sequence'      : [1,2],
@@ -94,8 +96,8 @@ def main():
 
     i2c2_dict = {
         '0x48' : 'ADC for pH Probes ADC1115',
-        # '0x60' : 'Thermocouple Amp MCP9600',
-        # '0x61' : 'Thermocouple Amp MCP9600',
+        '0x60' : 'Thermocouple Amp MCP9600',
+        '0x61' : 'Thermocouple Amp MCP9600',
         # '0x62' : 'Thermocouple Amp MCP9600',
         # '0x63' : 'Thermocouple Amp MCP9600',
         '0x64' : 'Thermocouple Amp MCP9600',
@@ -463,7 +465,7 @@ def main():
             timer_A = time.monotonic()
             mcu.led.value = not mcu.led.value #heartbeat LED
 
-        if time.monotonic() - timer_B > (1 * MINUTES):
+        if time.monotonic() - timer_B > (env['ph-temp-interval'] * MINUTES):
             timer_B = time.monotonic()
             ncm.add_to_timestamped_note(mcu.data)
 
@@ -481,7 +483,7 @@ def main():
             if ncm.receive_environment(env):
                 parse_environment()
 
-        if time.monotonic() - timer_D > (15 * MINUTES):
+        if time.monotonic() - timer_D > (env['note-send-interval'] * MINUTES):
             timer_D = time.monotonic()
 
             # Send note infrequently (e.g. 15 mins) to minimise consumption credit usage
