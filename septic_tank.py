@@ -46,8 +46,8 @@ def main():
         'gc-sample-times'       : ["02:00", "06:00", "10:00", "14:00", "18:00", "22:00"],
         'gc-pump-time'          : 240,# 4 minutes
         'gc-pump-sequence'      : [1,2],
-        'num-pumps'             : 2,
-        'ph-channels'           : 1,
+        'num-pumps'             : 4,
+        'ph-channels'           : 3,
         'ota'                   : __version__
         }
 
