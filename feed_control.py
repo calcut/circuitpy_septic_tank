@@ -26,16 +26,16 @@ def main():
 
     i2c_dict = {
         '0x0B' : 'Battery Monitor LC709203', # Built into ESP32S2 feather 
-        '0x68' : 'Realtime Clock PCF8523', # On Adalogger Featherwing
-        # '0x78' : 'Motor Featherwing PCA9685', #Solder bridge on address bit A4 and A3
         '0x6F' : 'Motor Featherwing PCA9685', #Solder bridge on address bits A0, A1, A2, A3
+        '0x6E' : 'Motor Featherwing PCA9685', #Solder bridge on address bits A1, A2, A3
+        '0x6D' : 'Motor Featherwing PCA9685', #Solder bridge on address bits A0, A2, A3
         '0x72' : 'Sparkfun LCD Display',
         '0x77' : 'Temp/Humidity/Pressure BME280' # Built into some ESP32S2 feathers 
     }
 
     env = {
         'pulses'                : 24, #number of pulses in a feed
-        'valves'                : 1, # valves under control
+        'valves'                : 12, # valves under control
         'feed-times'            : ["10:00", "18:00"],
         'valve-open-duration'   : 10, #seconds open in a pulse
         'valve-close-duration'  : 120, #seconds closed in a pulse
@@ -110,10 +110,25 @@ def main():
 
     try:
         global valves
-        valve_driver = MotorKit(i2c=mcu.i2c, address=0x6F)
+        valve_driver1 = MotorKit(i2c=mcu.i2c, address=0x6F)
+        valve_driver2 = MotorKit(i2c=mcu.i2c, address=0x6E)
+        valve_driver3 = MotorKit(i2c=mcu.i2c, address=0x6D)
 
-        motors = [valve_driver.motor1, valve_driver.motor2, valve_driver.motor3, valve_driver.motor4]
+        motors = []
+        motors.append(valve_driver1.motor1)
+        motors.append(valve_driver1.motor2)
+        motors.append(valve_driver1.motor3)
+        motors.append(valve_driver1.motor4)
 
+        motors.append(valve_driver2.motor1)
+        motors.append(valve_driver2.motor2)
+        motors.append(valve_driver2.motor3)
+        motors.append(valve_driver2.motor4)
+
+        motors.append(valve_driver3.motor1)
+        motors.append(valve_driver3.motor2)
+        motors.append(valve_driver3.motor3)
+        motors.append(valve_driver3.motor4)
         # Drop any unused valves as defined by the env['valves'] parameter
         motors = motors[:env['valves']]
         valves = []
@@ -122,9 +137,6 @@ def main():
         for m in motors:
             i+=1
             valves.append(Valve(motor=m, name=f'v{i:02}', loghandler=mcu.loghandler))
-            if mcu.aio:
-                mcu.aio_subscribe(f"v{i:02}-mode")
-                mcu.aio_subscribe(f"v{i:02}-manual-pos")
         
     except Exception as e:
         mcu.handle_exception(e)
@@ -159,10 +171,10 @@ def main():
             else:
                 s = 0
             mcu.data[f'v{i:02}-status'] = s
-            status += f'{s} '
+            status += f'{s}'
 
         mcu.display.set_cursor(0,0)
-        mcu.display.write(mcu.get_timestamp()[:20])
+        mcu.display.write(f'{mcu.get_timestamp()}        '[:20])
         mcu.display.set_cursor(0,1)
         a = next_feed
         mcu.display.write(f'Next Feed: {a.tm_hour:02}:{a.tm_min:02}:{a.tm_sec:02}            '[:20])
