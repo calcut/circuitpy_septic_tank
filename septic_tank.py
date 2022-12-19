@@ -10,12 +10,13 @@ from adafruit_ads1x15.analog_in import AnalogIn
 from adafruit_motorkit import MotorKit
 import busio
 import board
+import digitalio
 
 # scheduling and event/error handling libs
 import adafruit_logging as logging
 
 
-__version__ = "3.1.1"
+__version__ = "3.2.0"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
 __filename__ = "septic_tank.py"
 
@@ -29,6 +30,10 @@ LOGLEVEL = logging.DEBUG
 # DELETE_ARCHIVE = False
 DELETE_ARCHIVE = True
 
+PIN_JACKET1 = board.D9
+PIN_JACKET2 = board.D11
+PIN_JACKET3 = board.D12
+
 # global variable so pumps can be shut down after keyboard interrupt
 pumps_in = []
 pumps_out = []
@@ -40,6 +45,9 @@ def main():
         'pump1-speed'           : 0.6,
         'pump2-speed'           : 0.6,
         'pump3-speed'           : 0.6,
+        'pump4-speed'           : 0.6,
+        'jacket-target-temps'   : [30, 30, 30],
+        'jacket-hysteresis'     : 0.5,
         'gascard'               : True,
         'ph-temp-interval'      : 1, #minutes
         'note-send-interval'    : 30, #minutes
@@ -145,6 +153,30 @@ def main():
 
         return tc_channels
 
+    def connect_jacket_relays():
+        jacket_relays = []
+
+        try:
+            j1 = digitalio.DigitalInOut(PIN_JACKET1)
+            j1.direction = digitalio.Direction.OUTPUT
+            j1.value = True
+            jacket_relays.append(j1)
+
+            j2 = digitalio.DigitalInOut(PIN_JACKET2)
+            j2.direction = digitalio.Direction.OUTPUT
+            j2.value = False
+            jacket_relays.append(j2)
+
+            j3 = digitalio.DigitalInOut(PIN_JACKET3)
+            j3.direction = digitalio.Direction.OUTPUT
+            j3.value = False
+            jacket_relays.append(j3)
+
+        except Exception as e:
+            mcu.log.info(f"error connecting jacket relays {e}")
+
+        return jacket_relays
+
     def connect_ph_channels():
         try:
             ph_channels = []
@@ -213,6 +245,7 @@ def main():
 
 
     tc_channels = connect_thermocouple_channels()
+    jacket_relays = connect_jacket_relays()
     ph_channels = connect_ph_channels()
     connect_pumps()
 
@@ -302,7 +335,7 @@ def main():
                 if gc_sequence_index >= len(env['gc-pump-sequence']) :
                     gc_sequence_index = 0
                     # Push timer_pump out into the future so this won't trigger again until after the next sample alarm
-                    timer_pump = 999999
+                    timer_pump = time.monotonic() + 99999
                     mcu.log.info(f'GC sampling sequence complete')
 
                 else:
@@ -417,6 +450,32 @@ def main():
         else:
             mcu.log.info(f'running pump{index} at speed={speed}')
 
+    def jacket_control():
+        jacket_index = 0
+        hyst = env['jacket-hysteresis']
+
+        for j in jacket_relays:
+            try:
+                target_temp = env['jacket-target-temps'][jacket_index]
+                tc = tc_channels[jacket_index*2] #assuming 2 thermocouples per tank
+                temp = tc.temperature
+
+                if temp <= (target_temp - hyst) and j.value == False:
+                    mcu.log.debug(f"Jacket{jacket_index+1} at {temp}C, target {target_temp}C, turning on jacket")
+                    j.value = True
+
+                if temp >= (target_temp + hyst) and j.value == True:
+                    mcu.log.debug(f"Jacket{jacket_index+1} at {temp}C, target {target_temp}C, turning off jacket")
+                    j.value = False
+            except IndexError as e:
+                if len(tc_channels) < 6:
+                    mcu.log.info(f"Jacket control IndexError, expected 6 thermocouple channels, found {len(tc_channels)}")
+                else:
+                    mcu.log.info(f"Jacket control IndexError, could be due to {env['jacket-target-temps']=}")
+            except Exception as e:
+                mcu.log.info(f"Jacket control exception {e}")
+            finally:
+                jacket_index += 1
 
     def usb_serial_parser(string):
         if string == 'phcal':
@@ -463,6 +522,7 @@ def main():
 
         if time.monotonic() - timer_A > 1:
             timer_A = time.monotonic()
+            jacket_control()
             mcu.led.value = not mcu.led.value #heartbeat LED
 
         if time.monotonic() - timer_B > (env['ph-temp-interval'] * MINUTES):
