@@ -53,9 +53,10 @@ def main():
         'note-send-interval'    : 30, #minutes
         'gc-sample-times'       : ["02:00", "06:00", "10:00", "14:00", "18:00", "22:00"],
         'gc-pump-time'          : 240,# 4 minutes
-        'gc-pump-sequence'      : [1,2],
+        'gc-pump-sequence'      : [1, 4, 2, 4, 3, 4],
         'num-pumps'             : 4,
         'ph-channels'           : 3,
+        'dispay-page-time'      : 8, #seconds
         'ota'                   : __version__
         }
 
@@ -122,6 +123,13 @@ def main():
     timer_gc_sample = time.monotonic() #controls when gc pumps start
     next_gc_sample = None
     next_gc_sample_countdown = 0
+    gc_sample_memory = { # For displaying historical/previous samples
+        "gc1" : None,
+        "gc2" : None,
+        "gc3" : None,
+    }
+    display_page = 0
+    timer_display_page = time.monotonic()
 
     # instantiate the MCU helper class to set up the system
     mcu = Mcu(loglevel=LOGLEVEL, i2c_freq=100000)
@@ -304,7 +312,7 @@ def main():
                 mcu.data[f'tc{i+1}'] = tc.temperature
 
             if gc:
-                mcu.data[f'debug-concentration'] = gc.concentration
+                mcu.data[f'debug-concentration'] = gc.concentration * 100
 
         if len(pumps_in) > 0:
             if time.monotonic() - timer_gc_sample > next_gc_sample_countdown:
@@ -324,7 +332,9 @@ def main():
                 print(f'{timer_pump=}')
 
                 if gc:
-                    mcu.data[f'gc{pump_index}'] = gc.concentration
+                    sample = gc.concentration * 100
+                    mcu.data[f'gc{pump_index}'] = sample
+                    gc_sample_memory[f'gc{pump_index}'] = sample
                     mcu.log.info(f'Capturing gascard gc{pump_index} sample')
 
                 pumps_in[pump_index-1].throttle = 0
@@ -396,38 +406,78 @@ def main():
 
     def display_summary():
         nonlocal next_gc_sample
+        nonlocal display_page
+        nonlocal timer_display_page
+
+        if time.monotonic() - timer_display_page > env['dispay-page-time']:
+            timer_display_page = time.monotonic()
+            if display_page == 1:
+                display_page = 0
+            else:
+                display_page += 1
+
         try:
             if mcu.display:
-                if len(pumps_in) > 0:
+                if display_page == 0:
                     mcu.display.set_cursor(0,0)
-                    t = mcu.rtc.datetime
-                    line = f'p{pump_index}={pumps_in[pump_index-1].throttle} {mcu.data["tc4"]:3.1f}C {t.tm_hour:02}{t.tm_min:02}:{t.tm_sec:02}          '
-                    mcu.display.write(line[:20])
-
-                if gc:
-                    mcu.display.set_cursor(0,1)
                     line = 'gc'
-                    data = filter_data('debug-concentration', decimal_places=4)
-                    for key in sorted(data):
+                    for key in sorted(gc_sample_memory):
                         # display as float with max 4 decimal places, and max 7 chars long
-                        line += f' {data[key]:.4f}'[:7]
-                    line += f" Next@{next_gc_sample.tm_hour:02d}{next_gc_sample.tm_min:02d}"
-                    mcu.display.write(line[:20])
+                        value = gc_sample_memory[key]
+                        if value is not None:
+                            line += f' {value:3.1f}'
+                        else:
+                            line += f' None'
+                    mcu.display.write(f"{line:<20}"[:20])
 
-                mcu.display.set_cursor(0,2)
-                line = 'tc'
-                data = filter_data('tc', decimal_places=1)
-                data.pop('tc4', None) # Remove the ambient temperature thermocouple
-                for key in sorted(data):
-                    line+= f' {data[key]:3.1f}'
-                mcu.display.write(line[:20])
+                    lineA = 'tA'
+                    lineB = 'tB'
+                    data = filter_data('tc', decimal_places=1)
+                    data.pop('tc7', None) # Remove the ambient temperature thermocouple if it exists
+                    for key in sorted(data):
+                        if (int(key[-1]) % 2) == 0:
+                            lineA += f' {data[key]:3.1f}'
+                        else:
+                            lineB += f' {data[key]:3.1f}'
 
-                mcu.display.set_cursor(0,3)
-                line = 'ph'
-                data = filter_data('ph', decimal_places=2)
-                for key in sorted(data):
-                    line+= f' {data[key]:3.2f}'
-                mcu.display.write(line[:20])
+                    mcu.display.set_cursor(0,1)
+                    mcu.display.write(f"{lineA:<20}"[:20])
+                    mcu.display.set_cursor(0,2)
+                    mcu.display.write(f"{lineB:<20}"[:20])
+
+                    mcu.display.set_cursor(0,3)
+                    line = 'pH'
+                    data = filter_data('ph', decimal_places=1)
+                    for key in sorted(data):
+                        line+= f' {data[key]:3.1f}'
+                    mcu.display.write(f"{line:<20}"[:20])
+
+                if display_page == 1:
+                    mcu.display.set_cursor(0,0)
+                    line = mcu.get_timestamp()
+                    mcu.display.write(f"{line:<20}"[:20])
+
+                    mcu.display.set_cursor(0,1)
+                    line = f'gc {mcu.data["debug-concentration"]:3.1f} nxtsmp={next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}      ' 
+                    mcu.display.write(f"{line:<20}"[:20])
+
+                    mcu.display.set_cursor(0,2)
+                    line = f'pmps'
+                    for p in pumps_in:
+                        line+= f' {p.throttle:3.1f}'
+                    mcu.display.write(f"{line:<20}"[:20])
+
+                    mcu.display.set_cursor(0,3)
+                    line = f'jckts '
+                    for j in jacket_relays:
+                        if j.value == True:
+                            line+="1 "
+                        else:
+                            line+="0 "
+                    if "tc7" in mcu.data:
+                        line += f"amb={mcu.data['tc7']:3.1f}"
+                    mcu.display.write(f"{line:<20}"[:20])
+
         except Exception as e:
             mcu.log.warning(f"{e}")
 
@@ -528,6 +578,9 @@ def main():
         if time.monotonic() - timer_B > (env['ph-temp-interval'] * MINUTES):
             timer_B = time.monotonic()
             ncm.add_to_timestamped_note(mcu.data)
+            mcu.data.pop("gc1", None)
+            mcu.data.pop("gc2", None)
+            mcu.data.pop("gc3", None)
 
         if time.monotonic() - timer_C > 5:
             timer_C = time.monotonic()
