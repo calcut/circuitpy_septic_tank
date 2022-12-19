@@ -16,7 +16,7 @@ import digitalio
 import adafruit_logging as logging
 
 
-__version__ = "3.2.0"
+__version__ = "3.1.1"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
 __filename__ = "septic_tank.py"
 
@@ -425,7 +425,7 @@ def main():
                         # display as float with max 4 decimal places, and max 7 chars long
                         value = gc_sample_memory[key]
                         if value is not None:
-                            line += f' {value:3.1f}'
+                            line += f' {value:3.2f}'
                         else:
                             line += f' None'
                     mcu.display.write(f"{line:<20}"[:20])
@@ -458,7 +458,7 @@ def main():
                     mcu.display.write(f"{line:<20}"[:20])
 
                     mcu.display.set_cursor(0,1)
-                    line = f'gc {mcu.data["debug-concentration"]:3.1f} nxtsmp={next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}      ' 
+                    line = f'gc {mcu.data["debug-concentration"]:3.2f} nxtsmp={next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}      ' 
                     mcu.display.write(f"{line:<20}"[:20])
 
                     mcu.display.set_cursor(0,2)
