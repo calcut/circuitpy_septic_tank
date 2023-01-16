@@ -588,6 +588,12 @@ def main():
             timestamp = mcu.get_timestamp()
             mcu.log.debug(f"servicing notecard now {timestamp}")
 
+            # Checks if connected, storage availablity, etc.
+            ncm.check_status()
+            if ncm.connected:
+                mcu.pixel[0] = mcu.pixel.MAGENTA
+            else:
+                mcu.pixel[0] = mcu.pixel.RED
             # check for any new inbound notes to parse
             # ncm.receive_note()
             # parse_inbound_note()
