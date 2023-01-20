@@ -16,7 +16,7 @@ import digitalio
 import adafruit_logging as logging
 
 
-__version__ = "3.1.1"
+__version__ = "3.1.2"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
 __filename__ = "septic_tank.py"
 
@@ -425,7 +425,7 @@ def main():
                         # display as float with max 4 decimal places, and max 7 chars long
                         value = gc_sample_memory[key]
                         if value is not None:
-                            line += f' {value:3.2f}'
+                            line += f'{value: 3.2f}'
                         else:
                             line += f' None'
                     mcu.display.write(f"{line:<20}"[:20])
@@ -436,9 +436,11 @@ def main():
                     data.pop('tc7', None) # Remove the ambient temperature thermocouple if it exists
                     for key in sorted(data):
                         if (int(key[-1]) % 2) == 0:
-                            lineA += f' {data[key]:3.1f}'
+                            # Odd numbers e.g. tc1, tc3, tc5
+                            lineA += f'{data[key]: 3.1f}'
                         else:
-                            lineB += f' {data[key]:3.1f}'
+                            # Even numbers e.g. tc2, tc5, tc6
+                            lineB += f'{data[key]: 3.1f}'
 
                     mcu.display.set_cursor(0,1)
                     mcu.display.write(f"{lineA:<20}"[:20])
@@ -449,7 +451,7 @@ def main():
                     line = 'pH'
                     data = filter_data('ph', decimal_places=1)
                     for key in sorted(data):
-                        line+= f' {data[key]:3.1f}'
+                        line+= f'{data[key]: 3.1f}'
                     mcu.display.write(f"{line:<20}"[:20])
 
                 if display_page == 1:
@@ -458,13 +460,13 @@ def main():
                     mcu.display.write(f"{line:<20}"[:20])
 
                     mcu.display.set_cursor(0,1)
-                    line = f'gc {mcu.data["debug-concentration"]:3.2f} nxtsmp={next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}      ' 
+                    line = f'gc{mcu.data["debug-concentration"]: 3.2f} nxtsmp={next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}      ' 
                     mcu.display.write(f"{line:<20}"[:20])
 
                     mcu.display.set_cursor(0,2)
                     line = f'pmps'
                     for p in pumps_in:
-                        line+= f' {p.throttle:3.1f}'
+                        line+= f'{p.throttle: 3.1f}'
                     mcu.display.write(f"{line:<20}"[:20])
 
                     mcu.display.set_cursor(0,3)
@@ -475,7 +477,7 @@ def main():
                         else:
                             line+="0 "
                     if "tc7" in mcu.data:
-                        line += f"amb={mcu.data['tc7']:3.1f}"
+                        line += f"amb={mcu.data['tc7']: 3.1f}"
                     mcu.display.write(f"{line:<20}"[:20])
 
         except Exception as e:
