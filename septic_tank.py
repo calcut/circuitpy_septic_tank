@@ -477,7 +477,7 @@ def main():
                         else:
                             line+="0 "
                     if "tc7" in mcu.data:
-                        line += f"amb={mcu.data['tc7']: 3.1f}"
+                        line += f"amb{mcu.data['tc7']: 3.1f}"
                     mcu.display.write(f"{line:<20}"[:20])
 
         except Exception as e:
