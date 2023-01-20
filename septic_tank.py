@@ -35,8 +35,8 @@ PIN_JACKET2 = board.D11
 PIN_JACKET3 = board.D12
 
 # global variable so pumps can be shut down after keyboard interrupt
-pumps_in = []
-pumps_out = []
+pumps = []
+valves = []
 
 def main():
 
@@ -54,6 +54,7 @@ def main():
         'gc-sample-times'       : ["02:00", "06:00", "10:00", "14:00", "18:00", "22:00"],
         'gc-pump-time'          : 240,# 4 minutes
         'gc-pump-sequence'      : [1, 4, 2, 4, 3, 4],
+        'gc-pressure-settling'  : 10,
         'num-pumps'             : 4,
         'ph-channels'           : 3,
         'dispay-page-time'      : 8, #seconds
@@ -84,10 +85,10 @@ def main():
                 if val == __version__:
                     mcu.log.info(f"Not performing OTA, version matches {val}")
                 else:
-                    for p in pumps_in:
+                    for p in pumps:
                         p.throttle = 0
-                    for p in pumps_out:
-                        p.throttle = 0
+                    for v in valves:
+                        v.throttle = 0
                     mcu.ota_reboot()
 
     pump_index = 1 # track which pump is active
@@ -211,29 +212,27 @@ def main():
 
     def connect_pumps():
         try:
-            global pumps_in
-            global pumps_out
+            global pumps
+            global valves
             # Changing pwm freq from 1600Hz to <500Hz helps a lot with matching speeds. unsure exactly why. 
-            pump_driver_out = MotorKit(i2c=mcu.i2c2, address=0x6E, pwm_frequency=400)
-            pump_driver_in = MotorKit(i2c=mcu.i2c2, address=0x6F, pwm_frequency=400)
-            pumps_in = [pump_driver_in.motor1, pump_driver_in.motor2, pump_driver_in.motor3, pump_driver_in.motor4]
-            pumps_out = [pump_driver_out.motor1, pump_driver_out.motor2, pump_driver_out.motor3, pump_driver_out.motor4]
+            valve_driver = MotorKit(i2c=mcu.i2c2, address=0x6E, pwm_frequency=400)
+            pump_driver = MotorKit(i2c=mcu.i2c2, address=0x6F, pwm_frequency=400)
+            pumps = [pump_driver.motor1, pump_driver.motor2, pump_driver.motor3, pump_driver.motor4]
+            valves = [valve_driver.motor1, valve_driver.motor2, valve_driver.motor3, valve_driver.motor4]
+
+            for p in pumps:
+                p.throttle = 0
+            for v in valves:
+                v.throttle = 0
 
             # Drop any unused pumps as defined by the num-pumps environment variable
-            pumps_in = pumps_in[:env['num-pumps']]
-            pumps_out = pumps_out[:env['num-pumps']]
+            pumps = pumps[:env['num-pumps']]
+            valves = valves[:env['num-pumps']]
 
-            for p in pumps_in:
-                p.throttle = 0
-            for p in pumps_out:
-                p.throttle = 0
-            
         except Exception as e:
             mcu.handle_exception(e)
-            mcu.log.warning('Pump driver not found')
+            mcu.log.warning('Pump/Valve driver not found')
         
-        # return pumps_in
-
     def connect_gascard():
         try:
             uart = busio.UART(board.TX, board.RX, baudrate=57600)
@@ -263,7 +262,7 @@ def main():
         mcu.display.set_cursor(0,1)
         mcu.display.write(f'{len(ph_channels)} pH channels')
         mcu.display.set_cursor(0,2)
-        mcu.display.write(f'{len(pumps_in)} air pumps')
+        mcu.display.write(f'{len(pumps)} air pumps')
         mcu.display.set_cursor(0,3)
         mcu.display.write(f'Waiting for gascard')
 
@@ -294,8 +293,8 @@ def main():
         nonlocal gc_sequence_index
         nonlocal pump_index
 
-        global pumps_in
-        global pumps_out
+        global pumps
+        global valves
 
         if (time.monotonic() - timer_capture) >= interval:
             timer_capture = time.monotonic()
@@ -313,8 +312,9 @@ def main():
 
             if gc:
                 mcu.data[f'debug-concentration'] = gc.concentration * 100
+                mcu.data[f'debug-pressure'] = gc.pressure
 
-        if len(pumps_in) > 0:
+        if len(pumps) > 0:
             if time.monotonic() - timer_gc_sample > next_gc_sample_countdown:
                 timer_gc_sample = time.monotonic()
                 next_gc_sample_countdown = mcu.get_next_alarm(env['gc-sample-times'])
@@ -323,13 +323,13 @@ def main():
 
                 pump_index = env['gc-pump-sequence'][gc_sequence_index]
                 speed = env[f'pump{pump_index}-speed']
-                pumps_in[pump_index-1].throttle = speed
-                pumps_out[pump_index-1].throttle = speed
+                valves[pump_index-1].throttle = speed
+                time.sleep(0.5) #allow valves to open
+                pumps[pump_index-1].throttle = speed
                 timer_pump = time.monotonic()
                 mcu.log.info(f'GC sampling sequence: Starting with pump {pump_index} at {speed=}')
 
             if time.monotonic() - timer_pump > env['gc-pump-time']:
-                print(f'{timer_pump=}')
 
                 if gc:
                     sample = gc.concentration * 100
@@ -337,9 +337,20 @@ def main():
                     gc_sample_memory[f'gc{pump_index}'] = sample
                     mcu.log.info(f'Capturing gascard gc{pump_index} sample')
 
-                pumps_in[pump_index-1].throttle = 0
-                pumps_out[pump_index-1].throttle = 0  
                 mcu.log.info(f'disabling pump{pump_index} after {env["gc-pump-time"]}s')
+                pumps[pump_index-1].throttle = 0
+
+                if gc:
+                    mcu.log.info(f"waiting {env['gc-pressure-settling']}s for pressure to settle")
+                    for i in range(env['gc-pressure-settling']):
+                        gc.parse_serial()
+                        mcu.display_text(f"{i} pressure={gc.pressure}")
+                        mcu.log.info(f"{i} pressure={gc.pressure}")
+                        time.sleep(1)
+                    mcu.data[f'pr{pump_index}'] = gc.pressure
+
+                mcu.log.info(f"Closing valve{pump_index} after {env['gc-pressure-settling']}s")
+                valves[pump_index-1].throttle = 0  
 
                 gc_sequence_index += 1
                 if gc_sequence_index >= len(env['gc-pump-sequence']) :
@@ -351,8 +362,8 @@ def main():
                 else:
                     pump_index = env['gc-pump-sequence'][gc_sequence_index]
                     speed = env[f'pump{pump_index}-speed']
-                    pumps_in[pump_index-1].throttle = speed
-                    pumps_out[pump_index-1].throttle = speed
+                    pumps[pump_index-1].throttle = speed
+                    valves[pump_index-1].throttle = speed
                     timer_pump = time.monotonic()
                     mcu.log.info(f'GC sampling sequence: running pump {pump_index} at {speed=}')
 
@@ -465,7 +476,7 @@ def main():
 
                     mcu.display.set_cursor(0,2)
                     line = f'pmps'
-                    for p in pumps_in:
+                    for p in pumps:
                         line+= f'{p.throttle: 3.1f}'
                     mcu.display.write(f"{line:<20}"[:20])
 
@@ -492,13 +503,13 @@ def main():
 
     def run_pump(index, speed=None, duration=None):
 
-        pumps_in[index-1].throttle = speed
-        pumps_out[index-1].throttle = speed
+        pumps[index-1].throttle = speed
+        valves[index-1].throttle = speed
         if duration:
             mcu.log.info(f'running pump{index} at speed={speed} for {duration}s')
             time.sleep(duration)
-            pumps_in[index-1].throttle = 0
-            pumps_out[index-1].throttle = 0
+            pumps[index-1].throttle = 0
+            valves[index-1].throttle = 0
         else:
             mcu.log.info(f'running pump{index} at speed={speed}')
 
@@ -618,15 +629,15 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print('Code Stopped by Keyboard Interrupt')
-        for p in pumps_in:
+        for p in pumps:
             p.throttle = 0
-        for p in pumps_out:
-            p.throttle = 0
+        for v in valves:
+            v.throttle = 0
 
     except Exception as e:
         print(f'Code stopped by unhandled exception:')
-        for p in pumps_in:
+        for p in pumps:
             p.throttle = 0
-        for p in pumps_out:
-            p.throttle = 0
+        for v in valves:
+            v.throttle = 0
         reset(e)
