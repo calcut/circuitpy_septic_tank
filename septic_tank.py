@@ -591,7 +591,7 @@ def main():
             mcu.log.debug(f"servicing notecard now {timestamp}")
 
             # Checks if connected, storage availablity, etc.
-            ncm.check_status()
+            ncm.check_status(nosync_timeout=600)
             if ncm.connected:
                 mcu.pixel[0] = mcu.pixel.MAGENTA
             else:
