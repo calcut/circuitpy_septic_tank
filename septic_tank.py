@@ -323,7 +323,7 @@ def main():
 
                 pump_index = env['gc-pump-sequence'][gc_sequence_index]
                 speed = env[f'pump{pump_index}-speed']
-                valves[pump_index-1].throttle = speed
+                valves[pump_index-1].throttle = 1
                 time.sleep(0.5) #allow valves to open
                 pumps[pump_index-1].throttle = speed
                 timer_pump = time.monotonic()
@@ -363,7 +363,7 @@ def main():
                     pump_index = env['gc-pump-sequence'][gc_sequence_index]
                     speed = env[f'pump{pump_index}-speed']
                     pumps[pump_index-1].throttle = speed
-                    valves[pump_index-1].throttle = speed
+                    valves[pump_index-1].throttle = 1
                     timer_pump = time.monotonic()
                     mcu.log.info(f'GC sampling sequence: running pump {pump_index} at {speed=}')
 
@@ -504,7 +504,7 @@ def main():
     def run_pump(index, speed=None, duration=None):
 
         pumps[index-1].throttle = speed
-        valves[index-1].throttle = speed
+        valves[index-1].throttle = 1
         if duration:
             mcu.log.info(f'running pump{index} at speed={speed} for {duration}s')
             time.sleep(duration)
