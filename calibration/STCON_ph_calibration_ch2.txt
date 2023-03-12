@@ -1,0 +1,3 @@
+neutral_voltage=1.51342
+acid_voltage=2.02406
+calibration_temp=12.0
