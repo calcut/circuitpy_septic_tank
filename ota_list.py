@@ -22,6 +22,6 @@
   "f247" : {
       "/circuitpy_mcu/mcu.py" : "https://raw.githubusercontent.com/calcut/circuitpy_mcu/v3.1.3/mcu.py",
       "/circuitpy_mcu/notecard_manager.py" : "https://raw.githubusercontent.com/calcut/circuitpy_mcu/main/notecard_manager.py",
-      "/circuitpy_septic_tank/feed_control.py" : "https://raw.githubusercontent.com/calcut/circuitpy_septic_tank/v3.2.0/feed_control.py"
+      "/circuitpy_septic_tank/feed_control.py" : "https://raw.githubusercontent.com/calcut/circuitpy_septic_tank/v3.3.0/feed_control.py"
   }
 }
