@@ -6,11 +6,12 @@ from circuitpy_mcu.notecard_manager import Notecard_manager
 from circuitpy_septic_tank.solenoid_valve import Valve
 
 import time
+import board
 
 # scheduling and event/error handling libs
 import adafruit_logging as logging
 
-__version__ = "3.2.0"
+__version__ = "3.3.0"
 __filename__ = "feed_control.py"
 __repo__ = "https://github.com/calcut/circuitpy-septic-tank"
 
@@ -23,6 +24,20 @@ LOGLEVEL = logging.DEBUG
 # LOGLEVEL = logging.INFO
 
 def main():
+
+    closed_position_signals = [
+        board.A0,
+        board.A1,
+        board.A2,
+        board.A3,
+        board.A4,
+        board.MISO,
+        board.D12,
+        board.D11,
+        board.D10,
+        board.D6,
+        board.D5
+        ]
 
     i2c_dict = {
         '0x0B' : 'Battery Monitor LC709203', # Built into ESP32S2 feather 
@@ -135,8 +150,9 @@ def main():
         
         i=0
         for m in motors:
-            i+=1
-            valves.append(Valve(motor=m, name=f'v{i:02}', loghandler=mcu.loghandler))
+            valves.append(Valve(motor=m, name=f'v{i+1:02}', loghandler=mcu.loghandler))
+            valves[i].setup_position_signals(pin_close=closed_position_signals[i])
+            i+=1                                
         
     except Exception as e:
         mcu.handle_exception(e)
