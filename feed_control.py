@@ -11,7 +11,7 @@ import board
 # scheduling and event/error handling libs
 import adafruit_logging as logging
 
-__version__ = "3.3.0"
+__version__ = "3.3.1"
 __filename__ = "feed_control.py"
 __repo__ = "https://github.com/calcut/circuitpy-septic-tank"
 
@@ -57,6 +57,28 @@ def main():
         'valve-close-duration'  : 120, #seconds closed in a pulse
         'v01-mode'              : "auto", # or "manual"
         'v01-manual-pos'        : "closed", # or "open"
+        'v02-mode'              : "auto", # or "manual"
+        'v02-manual-pos'        : "closed", # or "open"
+        'v03-mode'              : "auto", # or "manual"
+        'v03-manual-pos'        : "closed", # or "open"
+        'v04-mode'              : "auto", # or "manual"
+        'v04-manual-pos'        : "closed", # or "open"
+        'v05-mode'              : "auto", # or "manual"
+        'v05-manual-pos'        : "closed", # or "open"
+        'v06-mode'              : "auto", # or "manual"
+        'v06-manual-pos'        : "closed", # or "open"
+        'v07-mode'              : "auto", # or "manual"
+        'v07-manual-pos'        : "closed", # or "open"
+        'v08-mode'              : "auto", # or "manual"
+        'v08-manual-pos'        : "closed", # or "open"
+        'v09-mode'              : "auto", # or "manual"
+        'v09-manual-pos'        : "closed", # or "open"
+        'v10-mode'              : "auto", # or "manual"
+        'v10-manual-pos'        : "closed", # or "open"
+        'v11-mode'              : "auto", # or "manual"
+        'v11-manual-pos'        : "closed", # or "open"
+        'v12-mode'              : "auto", # or "manual"
+        'v12-manual-pos'        : "closed", # or "open"
         'ota'                   : __version__
     }
 
