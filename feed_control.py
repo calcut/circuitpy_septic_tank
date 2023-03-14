@@ -148,9 +148,9 @@ def main():
 
     try:
         global valves
-        valve_driver1 = MotorKit(i2c=mcu.i2c, address=0x6F)
-        valve_driver2 = MotorKit(i2c=mcu.i2c, address=0x6E)
-        valve_driver3 = MotorKit(i2c=mcu.i2c, address=0x6D)
+        valve_driver1 = MotorKit(i2c=mcu.i2c, address=0x6E)
+        valve_driver2 = MotorKit(i2c=mcu.i2c, address=0x6D)
+        valve_driver3 = MotorKit(i2c=mcu.i2c, address=0x6F)
 
         motors = []
         motors.append(valve_driver1.motor1)
@@ -188,7 +188,7 @@ def main():
 
         if string.startswith('v'):
             try:
-                index = int(string[1])
+                index = int(string[1:])-1
                 valves[index].manual_pos = not valves[index].manual_pos
                 valves[index].manual = True
 
