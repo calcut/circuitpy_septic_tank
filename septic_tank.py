@@ -504,7 +504,10 @@ def main():
     def run_pump(index, speed=None, duration=None):
 
         pumps[index-1].throttle = speed
-        valves[index-1].throttle = 1
+        if speed == 0:
+            valves[index-1].throttle = 0
+        else:
+            valves[index-1].throttle = 1
         if duration:
             mcu.log.info(f'running pump{index} at speed={speed} for {duration}s')
             time.sleep(duration)
