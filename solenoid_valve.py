@@ -105,7 +105,7 @@ class Valve():
             if self.gpio_close.value == False:
                 self.closing = False
                 self.blocked = False
-                self.log.warning(f'closed in {round(time.monotonic() - self.timer_close, 1)}s')
+                self.log.info(f'closed in {round(time.monotonic() - self.timer_close, 1)}s')
 
         if self.opening:
             if time.monotonic() - self.timer_open > 10:
@@ -115,7 +115,7 @@ class Valve():
             if self.gpio_open.value == False:
                 self.opening = False
                 self.blocked = False
-                self.log.warning(f'opened in {round(time.monotonic() - self.timer_open, 1)}s')
+                self.log.info(f'opened in {round(time.monotonic() - self.timer_open, 1)}s')
 
         if self.manual:
             self.pulsing = False

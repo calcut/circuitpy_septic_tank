@@ -11,7 +11,7 @@ import board
 # scheduling and event/error handling libs
 import adafruit_logging as logging
 
-__version__ = "3.3.1"
+__version__ = "3.3.2"
 __filename__ = "feed_control.py"
 __repo__ = "https://github.com/calcut/circuitpy-septic-tank"
 
@@ -105,7 +105,7 @@ def main():
                 timer_feed = time.monotonic()
                 next_feed_countdown = mcu.get_next_alarm(val)
                 next_feed = time.localtime(time.time() + next_feed_countdown)
-                mcu.log.warning(f"alarm set for {next_feed.tm_hour:02d}:{next_feed.tm_min:02d}:00")
+                mcu.log.info(f"alarm set for {next_feed.tm_hour:02d}:{next_feed.tm_min:02d}:00")
 
             if key[0] == 'v' and key[3] == '-':
                 valve_index = int(key[1:3])
@@ -246,7 +246,7 @@ def main():
             next_feed_countdown = mcu.get_next_alarm(env['feed-times'])
 
             next_feed = time.localtime(time.time() + next_feed_countdown)
-            mcu.log.warning(f"alarm set for {next_feed.tm_hour:02d}:{next_feed.tm_min:02d}:00")
+            mcu.log.info(f"alarm set for {next_feed.tm_hour:02d}:{next_feed.tm_min:02d}:00")
             
             for v in valves:
                 v.pulsing = True
