@@ -647,8 +647,4 @@ if __name__ == "__main__":
 
     except Exception as e:
         print(f'Code stopped by unhandled exception:')
-        for p in pumps:
-            p.throttle = 0
-        for v in valves:
-            v.throttle = 0
         reset(e)
