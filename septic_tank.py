@@ -16,7 +16,7 @@ import digitalio
 import adafruit_logging as logging
 
 
-__version__ = "3.3.2"
+__version__ = "3.3.3"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
 __filename__ = "septic_tank.py"
 
@@ -48,6 +48,7 @@ def main():
         'pump4-speed'           : 0.6,
         'jacket-target-temps'   : [30, 30, 30],
         'jacket-hysteresis'     : 0.5,
+        'jacket-control'        : True,
         'gascard'               : True,
         'ph-temp-interval'      : 1, #minutes
         'note-send-interval'    : 30, #minutes
@@ -252,7 +253,10 @@ def main():
 
 
     tc_channels = connect_thermocouple_channels()
-    jacket_relays = connect_jacket_relays()
+    if env['jacket-control']:
+        jacket_relays = connect_jacket_relays()
+    else:
+        jacket_relays = []
     ph_channels = connect_ph_channels()
     connect_pumps()
 
@@ -313,6 +317,10 @@ def main():
             if gc:
                 mcu.data[f'debug-concentration'] = gc.concentration * 100
                 mcu.data[f'debug-pressure'] = gc.pressure
+
+            else:
+                mcu.data["debug-concentration"] = 0
+                mcu.data["debug-pressure"] = 0
 
         if len(pumps) > 0:
             if time.monotonic() - timer_gc_sample > next_gc_sample_countdown:
