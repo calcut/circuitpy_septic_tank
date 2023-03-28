@@ -1,4 +1,5 @@
 import time
+import supervisor
 from circuitpy_mcu.mcu import Mcu_swan
 from circuitpy_mcu.notecard_manager import Notecard_manager
 from circuitpy_mcu.reset import reset
@@ -77,7 +78,7 @@ def main():
                 mcu.display.set_fast_backlight_rgb(r, g, b)
 
             if key == 'gc-sample-times':
-                timer_gc_sample = time.monotonic()
+                timer_gc_sample = (supervisor.ticks_ms() / 1000)
                 next_gc_sample_countdown = mcu.get_next_alarm(val)
                 next_gc_sample = time.localtime(time.time() + next_gc_sample_countdown)
                 mcu.log.warning(f"alarm set for {next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}:00")
@@ -121,8 +122,8 @@ def main():
     }
 
     timer_pump = 999999 #controls when gc pumps stop. initialised large, to avoid early sampling
-    timer_capture = time.monotonic() # controls general sample interval
-    timer_gc_sample = time.monotonic() #controls when gc pumps start
+    timer_capture = (supervisor.ticks_ms() / 1000) # controls general sample interval
+    timer_gc_sample = (supervisor.ticks_ms() / 1000) #controls when gc pumps start
     next_gc_sample = None
     next_gc_sample_countdown = 0
     gc_sample_memory = { # For displaying historical/previous samples
@@ -131,7 +132,7 @@ def main():
         "gc3" : None,
     }
     display_page = 0
-    timer_display_page = time.monotonic()
+    timer_display_page = (supervisor.ticks_ms() / 1000)
 
     # instantiate the MCU helper class to set up the system
     mcu = Mcu_swan(loglevel=LOGLEVEL, i2c_freq=100000)
@@ -159,7 +160,7 @@ def main():
                 mcu.log.info(f'Found thermocouple channel at address {addr:x}')
                 
             except Exception as e:
-                mcu.log.info(f'No thermocouple channel at {addr:x}')
+                mcu.log.info(f'No thermocouple channel at {addr:x} {e}')
 
         return tc_channels
 
@@ -240,9 +241,7 @@ def main():
             gc = Gascard(uart)
             gc.log.addHandler(mcu.loghandler)
             gc.log.setLevel(logging.INFO)
-            mcu.watchdog_feed() #gascard startup can take a while
             gc.poll_until_ready()
-            mcu.watchdog_feed() #gascard startup can take a while
 
         except Exception as e:
             mcu.handle_exception(e)
@@ -300,8 +299,8 @@ def main():
         global pumps
         global valves
 
-        if (time.monotonic() - timer_capture) >= interval:
-            timer_capture = time.monotonic()
+        if ((supervisor.ticks_ms() / 1000) - timer_capture) >= interval:
+            timer_capture = (supervisor.ticks_ms() / 1000)
         
             # keep keys 'url safe', i.e.
             # lower case ASCII letters, numbers, dashes only
@@ -323,8 +322,8 @@ def main():
                 mcu.data["debug-pressure"] = 0
 
         if len(pumps) > 0:
-            if time.monotonic() - timer_gc_sample > next_gc_sample_countdown:
-                timer_gc_sample = time.monotonic()
+            if (supervisor.ticks_ms() / 1000) - timer_gc_sample > next_gc_sample_countdown:
+                timer_gc_sample = (supervisor.ticks_ms() / 1000)
                 next_gc_sample_countdown = mcu.get_next_alarm(env['gc-sample-times'])
                 next_gc_sample = time.localtime(time.time() + next_gc_sample_countdown)
                 mcu.log.warning(f"alarm set for {next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}:00")
@@ -334,10 +333,10 @@ def main():
                 valves[pump_index-1].throttle = 1
                 time.sleep(0.5) #allow valves to open
                 pumps[pump_index-1].throttle = speed
-                timer_pump = time.monotonic()
+                timer_pump = (supervisor.ticks_ms() / 1000)
                 mcu.log.info(f'GC sampling sequence: Starting with pump {pump_index} at {speed=}')
 
-            if time.monotonic() - timer_pump > env['gc-pump-time']:
+            if (supervisor.ticks_ms() / 1000) - timer_pump > env['gc-pump-time']:
 
                 if gc:
                     sample = gc.concentration * 100
@@ -364,7 +363,7 @@ def main():
                 if gc_sequence_index >= len(env['gc-pump-sequence']) :
                     gc_sequence_index = 0
                     # Push timer_pump out into the future so this won't trigger again until after the next sample alarm
-                    timer_pump = time.monotonic() + 99999
+                    timer_pump = (supervisor.ticks_ms() / 1000) + 99999
                     mcu.log.info(f'GC sampling sequence complete')
 
                 else:
@@ -372,7 +371,7 @@ def main():
                     speed = env[f'pump{pump_index}-speed']
                     pumps[pump_index-1].throttle = speed
                     valves[pump_index-1].throttle = 1
-                    timer_pump = time.monotonic()
+                    timer_pump = (supervisor.ticks_ms() / 1000)
                     mcu.log.info(f'GC sampling sequence: running pump {pump_index} at {speed=}')
 
         display_summary()
@@ -428,8 +427,8 @@ def main():
         nonlocal display_page
         nonlocal timer_display_page
 
-        if time.monotonic() - timer_display_page > env['dispay-page-time']:
-            timer_display_page = time.monotonic()
+        if (supervisor.ticks_ms() / 1000) - timer_display_page > env['dispay-page-time']:
+            timer_display_page = (supervisor.ticks_ms() / 1000)
             if display_page == 1:
                 display_page = 0
             else:
@@ -594,30 +593,30 @@ def main():
             # if gc.mode != 'Normal Channel':
             #     print(data_string)
 
-        if time.monotonic() - timer_A > 1:
-            timer_A = time.monotonic()
+        if (supervisor.ticks_ms() / 1000) - timer_A > 1:
+            timer_A = (supervisor.ticks_ms() / 1000)
             jacket_control()
             mcu.led.value = not mcu.led.value #heartbeat LED
 
-        if time.monotonic() - timer_B > (env['ph-temp-interval'] * MINUTES):
-            timer_B = time.monotonic()
+        if (supervisor.ticks_ms() / 1000) - timer_B > (env['ph-temp-interval'] * MINUTES):
+            timer_B = (supervisor.ticks_ms() / 1000)
             ncm.add_to_timestamped_note(mcu.data)
             mcu.data.pop("gc1", None)
             mcu.data.pop("gc2", None)
             mcu.data.pop("gc3", None)
 
-        if time.monotonic() - timer_C > 5:
-            timer_C = time.monotonic()
+        if (supervisor.ticks_ms() / 1000) - timer_C > 5:
+            timer_C = (supervisor.ticks_ms() / 1000)
 
             timestamp = mcu.get_timestamp()
             mcu.log.debug(f"servicing notecard now {timestamp}")
 
             # Checks if connected, storage availablity, etc.
             ncm.check_status(nosync_timeout=600)
-            if ncm.connected:
-                mcu.pixel[0] = mcu.pixel.MAGENTA
-            else:
-                mcu.pixel[0] = mcu.pixel.RED
+            # if ncm.connected:
+            #     mcu.pixel[0] = mcu.pixel.MAGENTA
+            # else:
+            #     mcu.pixel[0] = mcu.pixel.RED
             # check for any new inbound notes to parse
             # ncm.receive_note()
             # parse_inbound_note()
@@ -626,8 +625,8 @@ def main():
             if ncm.receive_environment(env):
                 parse_environment()
 
-        if time.monotonic() - timer_D > (env['note-send-interval'] * MINUTES):
-            timer_D = time.monotonic()
+        if (supervisor.ticks_ms() / 1000) - timer_D > (env['note-send-interval'] * MINUTES):
+            timer_D = (supervisor.ticks_ms() / 1000)
 
             # Send note infrequently (e.g. 15 mins) to minimise consumption credit usage
             ncm.send_timestamped_note(sync=True)
@@ -636,7 +635,6 @@ def main():
 
 if __name__ == "__main__":
     try:
-        # enable_watchdog(timeout=120)
         main()
     except KeyboardInterrupt:
         print('Code Stopped by Keyboard Interrupt')
