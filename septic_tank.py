@@ -1,7 +1,7 @@
 import time
-from circuitpy_mcu.mcu import Mcu
+from circuitpy_mcu.mcu import Mcu_swan
 from circuitpy_mcu.notecard_manager import Notecard_manager
-from circuitpy_mcu.ota_bootloader import reset, enable_watchdog
+from circuitpy_mcu.reset import reset
 from circuitpy_septic_tank.gascard import Gascard
 from circuitpy_mcu.DFRobot_PH import DFRobot_PH
 import adafruit_mcp9600
@@ -134,7 +134,7 @@ def main():
     timer_display_page = time.monotonic()
 
     # instantiate the MCU helper class to set up the system
-    mcu = Mcu(loglevel=LOGLEVEL, i2c_freq=100000)
+    mcu = Mcu_swan(loglevel=LOGLEVEL, i2c_freq=100000)
     mcu.enable_i2c2()
     
     # Check what devices are present on the i2c bus
@@ -636,7 +636,7 @@ def main():
 
 if __name__ == "__main__":
     try:
-        enable_watchdog(timeout=120)
+        # enable_watchdog(timeout=120)
         main()
     except KeyboardInterrupt:
         print('Code Stopped by Keyboard Interrupt')
