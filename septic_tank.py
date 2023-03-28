@@ -121,18 +121,7 @@ def main():
         '0x70' : 'PCA9685 (All Call)', #Combined "All Call" address (not supported)
     }
 
-    timer_pump = 999999 #controls when gc pumps stop. initialised large, to avoid early sampling
-    timer_capture = (supervisor.ticks_ms() / 1000) # controls general sample interval
-    timer_gc_sample = (supervisor.ticks_ms() / 1000) #controls when gc pumps start
-    next_gc_sample = None
-    next_gc_sample_countdown = 0
-    gc_sample_memory = { # For displaying historical/previous samples
-        "gc1" : None,
-        "gc2" : None,
-        "gc3" : None,
-    }
-    display_page = 0
-    timer_display_page = (supervisor.ticks_ms() / 1000)
+
 
     # instantiate the MCU helper class to set up the system
     mcu = Mcu_swan(loglevel=LOGLEVEL, i2c_freq=100000)
@@ -578,6 +567,20 @@ def main():
     mcu.log.info(f'BOOT complete at {mcu.get_timestamp()} UTC')
     if mcu.display:
         mcu.display.clear()
+
+
+    timer_pump = 999999 #controls when gc pumps stop. initialised large, to avoid early sampling
+    timer_capture = (supervisor.ticks_ms() / 1000) # controls general sample interval
+    timer_gc_sample = (supervisor.ticks_ms() / 1000) #controls when gc pumps start
+    next_gc_sample = None
+    next_gc_sample_countdown = 0
+    gc_sample_memory = { # For displaying historical/previous samples
+        "gc1" : None,
+        "gc2" : None,
+        "gc3" : None,
+    }
+    display_page = 0
+    timer_display_page = (supervisor.ticks_ms() / 1000)
 
     timer_A=0
     timer_B=0
