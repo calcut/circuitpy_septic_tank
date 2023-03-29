@@ -41,6 +41,14 @@ valves = []
 
 def main():
 
+    notecard_config = {
+        'productUID' : 'dwt.ac.uk.septicsensor',
+        'mode'       : 'continuous',
+        'sync'       : True,
+        'inbound'    : 2,
+        'outbound'   : 2,
+    }
+
     # set defaults for environment variables, (may be overridden by notehub)
     env = {
         'pump1-speed'           : 0.6,
@@ -133,7 +141,7 @@ def main():
     mcu.i2c_identify(i2c2_dict, i2c=mcu.i2c2)
     mcu.attach_display_sparkfun_20x4()
 
-    ncm = Notecard_manager(loghandler=mcu.loghandler, i2c=mcu.i2c, watchdog=120, loglevel=LOGLEVEL)
+    ncm = Notecard_manager(loghandler=mcu.loghandler, i2c=mcu.i2c, watchdog=120, loglevel=LOGLEVEL, config_dict=notecard_config)
     mcu.log.info(f'STARTING {__filename__} {__version__}')
 
     ncm.set_default_envs(env)
