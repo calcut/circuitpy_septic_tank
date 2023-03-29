@@ -126,6 +126,7 @@ def main():
     # instantiate the MCU helper class to set up the system
     mcu = Mcu_swan(loglevel=LOGLEVEL, i2c_freq=100000)
     mcu.enable_i2c2()
+    mcu.enable_uart2()
     
     # Check what devices are present on the i2c bus
     mcu.i2c_identify(i2c_dict)
@@ -226,8 +227,8 @@ def main():
         
     def connect_gascard():
         try:
-            uart = busio.UART(board.TX, board.RX, baudrate=57600)
-            gc = Gascard(uart)
+            # uart = busio.UART(board.TX, board.RX, baudrate=57600)
+            gc = Gascard(mcu.uart2)
             gc.log.addHandler(mcu.loghandler)
             gc.log.setLevel(logging.INFO)
             gc.poll_until_ready()
