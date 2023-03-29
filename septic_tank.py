@@ -428,7 +428,7 @@ def main():
             if mcu.display:
                 if display_page == 0:
                     mcu.display.set_cursor(0,0)
-                    line = 'gc'
+                    line = 'xx'
                     for key in sorted(gc_sample_memory):
                         # display as float with max 4 decimal places, and max 7 chars long
                         value = gc_sample_memory[key]
@@ -616,7 +616,7 @@ def main():
             mcu.log.debug(f"servicing notecard now {timestamp}")
 
             # Checks if connected, storage availablity, etc.
-            ncm.check_status(nosync_timeout=600)
+            ncm.check_status(nosync_timeout=7200)
             # if ncm.connected:
             #     mcu.pixel[0] = mcu.pixel.MAGENTA
             # else:
