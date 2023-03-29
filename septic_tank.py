@@ -436,7 +436,7 @@ def main():
             if mcu.display:
                 if display_page == 0:
                     mcu.display.set_cursor(0,0)
-                    line = 'xx'
+                    line = 'gc'
                     for key in sorted(gc_sample_memory):
                         # display as float with max 4 decimal places, and max 7 chars long
                         value = gc_sample_memory[key]
