@@ -80,8 +80,8 @@ def main():
             if key == 'gc-sample-times':
                 timer_gc_sample = time.monotonic()
                 next_gc_sample_countdown = mcu.get_next_alarm(val, env['utc-offset-hours'])
-                next_gc_sample = time.localtime(time.time() + next_gc_sample_countdown)
-                mcu.log.info(f"alarm set for {next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}:00 UTC")
+                next_gc_sample = time.localtime(time.time() + next_gc_sample_countdown + env['utc-offset-hours']*60*60)
+                mcu.log.info(f"alarm set for {next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}:00 localtime")
 
             if key == 'ota':
                 if val == __version__:
@@ -327,8 +327,8 @@ def main():
             if time.monotonic() - timer_gc_sample > next_gc_sample_countdown:
                 timer_gc_sample = time.monotonic()
                 next_gc_sample_countdown = mcu.get_next_alarm(env['gc-sample-times'])
-                next_gc_sample = time.localtime(time.time() + next_gc_sample_countdown)
-                mcu.log.warning(f"alarm set for {next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}:00")
+                next_gc_sample = time.localtime(time.time() + next_gc_sample_countdown + env['utc-offset-hours']*60*60)
+                mcu.log.warning(f"alarm set for {next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}:00 localtime")
 
                 pump_index = env['gc-pump-sequence'][gc_sequence_index]
                 speed = env[f'pump{pump_index}-speed']
