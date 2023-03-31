@@ -11,7 +11,7 @@ import board
 # scheduling and event/error handling libs
 import adafruit_logging as logging
 
-__version__ = "3.3.2"
+__version__ = "3.3.4"
 __filename__ = "feed_control.py"
 __repo__ = "https://github.com/calcut/circuitpy-septic-tank"
 
@@ -53,6 +53,7 @@ def main():
         'pulses'                : 24, #number of pulses in a feed
         'valves'                : 12, # valves under control
         'feed-times'            : ["10:00", "18:00"],
+        'utc_offset_hours'      : 1,
         'valve-open-duration'   : 10, #seconds open in a pulse
         'valve-close-duration'  : 120, #seconds closed in a pulse
         'v01-mode'              : "auto", # or "manual"
@@ -103,7 +104,7 @@ def main():
 
             if key == 'feed-times':
                 timer_feed = time.monotonic()
-                next_feed_countdown = mcu.get_next_alarm(val)
+                next_feed_countdown = mcu.get_next_alarm(val, env['utc_offset_hours'])
                 next_feed = time.localtime(time.time() + next_feed_countdown)
                 mcu.log.info(f"alarm set for {next_feed.tm_hour:02d}:{next_feed.tm_min:02d}:00")
 
@@ -213,7 +214,7 @@ def main():
             status += f'{s}'
 
         mcu.display.set_cursor(0,0)
-        mcu.display.write(f'{mcu.get_timestamp()}        '[:20])
+        mcu.display.write(f'{mcu.get_timestamp(env["utc_offset_hours"])}        '[:20])
         mcu.display.set_cursor(0,1)
         a = next_feed
         mcu.display.write(f'Next Feed: {a.tm_hour:02}:{a.tm_min:02}:{a.tm_sec:02}            '[:20])
@@ -231,6 +232,7 @@ def main():
             pass
         mcu.valve_status = status
 
+    mcu.log.info(f'BOOT complete at {mcu.get_timestamp()} UTC, {mcu.get_timestamp(env["utc_offset_hours"])} local')
     
     timer_A = 0
     timer_B = 0
@@ -258,7 +260,7 @@ def main():
 
         if time.monotonic() - timer_B > (5):
             timer_B = time.monotonic()
-            timestamp = mcu.get_timestamp()
+            timestamp = mcu.get_timestamp(env['utc_offset_hours'])
             mcu.log.debug(f"servicing notecard now {timestamp}")
             # ncm.add_to_timestamped_note(mcu.data)
 

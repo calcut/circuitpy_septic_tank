@@ -16,7 +16,7 @@ import digitalio
 import adafruit_logging as logging
 
 
-__version__ = "3.3.3"
+__version__ = "3.3.4"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
 __filename__ = "septic_tank.py"
 
@@ -53,6 +53,7 @@ def main():
         'ph-temp-interval'      : 1, #minutes
         'note-send-interval'    : 30, #minutes
         'gc-sample-times'       : ["02:00", "06:00", "10:00", "14:00", "18:00", "22:00"],
+        'utc-offset-hours'      : 1,
         'gc-pump-time'          : 240,# 4 minutes
         'gc-pump-sequence'      : [1, 4, 2, 4, 3, 4],
         'gc-pressure-settling'  : 10,
@@ -78,7 +79,7 @@ def main():
 
             if key == 'gc-sample-times':
                 timer_gc_sample = time.monotonic()
-                next_gc_sample_countdown = mcu.get_next_alarm(val)
+                next_gc_sample_countdown = mcu.get_next_alarm(val, env['utc-offset-hours'])
                 next_gc_sample = time.localtime(time.time() + next_gc_sample_countdown)
                 mcu.log.warning(f"alarm set for {next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}:00")
 
@@ -475,7 +476,7 @@ def main():
 
                 if display_page == 1:
                     mcu.display.set_cursor(0,0)
-                    line = mcu.get_timestamp()
+                    line = mcu.get_timestamp(env['utc-offset-hours'])
                     mcu.display.write(f"{line:<20}"[:20])
 
                     mcu.display.set_cursor(0,1)
@@ -576,7 +577,7 @@ def main():
                 # gc.write_command(string)
 
 
-    mcu.log.info(f'BOOT complete at {mcu.get_timestamp()} UTC')
+    mcu.log.info(f'BOOT complete at {mcu.get_timestamp()} UTC, {mcu.get_timestamp(env["utc_offset_hours"])} local')
     if mcu.display:
         mcu.display.clear()
 
@@ -609,7 +610,7 @@ def main():
         if time.monotonic() - timer_C > 5:
             timer_C = time.monotonic()
 
-            timestamp = mcu.get_timestamp()
+            timestamp = mcu.get_timestamp(env['utc-offset-hours'])
             mcu.log.debug(f"servicing notecard now {timestamp}")
 
             # Checks if connected, storage availablity, etc.
