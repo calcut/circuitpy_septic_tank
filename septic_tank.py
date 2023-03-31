@@ -577,7 +577,7 @@ def main():
                 # gc.write_command(string)
 
 
-    mcu.log.warning(f'BOOT complete at {mcu.get_timestamp()} UTC, {mcu.get_timestamp(env["utc_offset_hours"])} local')
+    mcu.log.warning(f'BOOT complete at {mcu.get_timestamp()} UTC, {mcu.get_timestamp(env["utc-offset-hours"])} local')
     if mcu.display:
         mcu.display.clear()
 
