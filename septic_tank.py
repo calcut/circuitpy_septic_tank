@@ -81,7 +81,7 @@ def main():
                 timer_gc_sample = time.monotonic()
                 next_gc_sample_countdown = mcu.get_next_alarm(val, env['utc-offset-hours'])
                 next_gc_sample = time.localtime(time.time() + next_gc_sample_countdown)
-                mcu.log.warning(f"alarm set for {next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}:00")
+                mcu.log.info(f"alarm set for {next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}:00 UTC")
 
             if key == 'ota':
                 if val == __version__:
@@ -577,7 +577,7 @@ def main():
                 # gc.write_command(string)
 
 
-    mcu.log.info(f'BOOT complete at {mcu.get_timestamp()} UTC, {mcu.get_timestamp(env["utc_offset_hours"])} local')
+    mcu.log.warning(f'BOOT complete at {mcu.get_timestamp()} UTC, {mcu.get_timestamp(env["utc_offset_hours"])} local')
     if mcu.display:
         mcu.display.clear()
 
