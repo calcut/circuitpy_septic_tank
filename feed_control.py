@@ -105,8 +105,8 @@ def main():
             if key == 'feed-times':
                 timer_feed = time.monotonic()
                 next_feed_countdown = mcu.get_next_alarm(val, env['utc-offset-hours'])
-                next_feed = time.localtime(time.time() + next_feed_countdown)
-                mcu.log.info(f"alarm set for {next_feed.tm_hour:02d}:{next_feed.tm_min:02d}:00 UTC")
+                next_feed = time.localtime(time.time() + next_feed_countdown + env['utc-offset-hours']*60*60)
+                mcu.log.info(f"alarm set for {next_feed.tm_hour:02d}:{next_feed.tm_min:02d}:00 localtime")
 
             if key[0] == 'v' and key[3] == '-':
                 valve_index = int(key[1:3])
@@ -247,8 +247,8 @@ def main():
             timer_feed = time.monotonic()
             next_feed_countdown = mcu.get_next_alarm(env['feed-times'])
 
-            next_feed = time.localtime(time.time() + next_feed_countdown)
-            mcu.log.info(f"alarm set for {next_feed.tm_hour:02d}:{next_feed.tm_min:02d}:00 UTC")
+            next_feed = time.localtime(time.time() + next_feed_countdown + env['utc-offset-hours']*60*60)
+            mcu.log.info(f"alarm set for {next_feed.tm_hour:02d}:{next_feed.tm_min:02d}:00 localtime")
             
             for v in valves:
                 v.pulsing = True
