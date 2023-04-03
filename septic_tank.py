@@ -326,7 +326,7 @@ def main():
         if len(pumps) > 0:
             if time.monotonic() - timer_gc_sample > next_gc_sample_countdown:
                 timer_gc_sample = time.monotonic()
-                next_gc_sample_countdown = mcu.get_next_alarm(env['gc-sample-times'])
+                next_gc_sample_countdown = mcu.get_next_alarm(env['gc-sample-times'], env['utc-offset-hours'])
                 next_gc_sample = time.localtime(time.time() + next_gc_sample_countdown + env['utc-offset-hours']*60*60)
                 mcu.log.warning(f"alarm set for {next_gc_sample.tm_hour:02d}:{next_gc_sample.tm_min:02d}:00 localtime")
 
