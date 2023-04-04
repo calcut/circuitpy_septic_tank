@@ -16,7 +16,7 @@ import digitalio
 import adafruit_logging as logging
 
 
-__version__ = "3.3.5"
+__version__ = "3.4.0"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
 __filename__ = "septic_tank.py"
 
@@ -310,10 +310,15 @@ def main():
             for ph in ph_channels:
                 i = ph_channels.index(ph)
                 mcu.data[f'ph{i+1}'] = ph.read_PH()
-                
+            
+            tank_index=0
             for tc in tc_channels:
                 i = tc_channels.index(tc)
-                mcu.data[f'tc{i+1}'] = tc.temperature
+                if (i%2 == 0): #even numbers, 0,2,4
+                    tank_index+=1
+                    mcu.data[f'ts{tank_index}'] = tc.temperature
+                else: # odd numbers #1,3,5
+                    mcu.data[f'tl{tank_index}'] = tc.temperature
 
             if gc:
                 mcu.data[f'debug-concentration'] = gc.concentration * 100
@@ -450,22 +455,21 @@ def main():
                             line += f' None'
                     mcu.display.write(f"{line:<20}"[:20])
 
-                    lineA = 'tA'
-                    lineB = 'tB'
-                    data = filter_data('tc', decimal_places=1)
-                    data.pop('tc7', None) # Remove the ambient temperature thermocouple if it exists
-                    for key in sorted(data):
-                        if (int(key[-1]) % 2) == 0:
-                            # Odd numbers e.g. tc1, tc3, tc5
-                            lineA += f'{data[key]: 3.1f}'
-                        else:
-                            # Even numbers e.g. tc2, tc5, tc6
-                            lineB += f'{data[key]: 3.1f}'
+                    lineShort = 'ts'
+                    lineLong = 'tl'
+                    datashort = filter_data('ts', decimal_places=1)
+                    datashort.pop('ts4', None) # Remove the ambient temperature thermocouple if it exists
+                    for key in sorted(datashort):
+                        lineShort += f'{datashort[key]: 3.1f}'
+
+                    datalong = filter_data('tl', decimal_places=1)
+                    for key in sorted(datalong):
+                        lineLong += f'{datalong[key]: 3.1f}'
 
                     mcu.display.set_cursor(0,1)
-                    mcu.display.write(f"{lineA:<20}"[:20])
+                    mcu.display.write(f"{lineShort:<20}"[:20])
                     mcu.display.set_cursor(0,2)
-                    mcu.display.write(f"{lineB:<20}"[:20])
+                    mcu.display.write(f"{lineLong:<20}"[:20])
 
                     mcu.display.set_cursor(0,3)
                     line = 'pH'
