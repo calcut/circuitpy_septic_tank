@@ -16,7 +16,7 @@ import digitalio
 import adafruit_logging as logging
 
 
-__version__ = "3.4.0"
+__version__ = "3.4.1"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
 __filename__ = "septic_tank.py"
 
@@ -355,11 +355,11 @@ def main():
                 pumps[pump_index-1].throttle = 0
 
                 if gc:
-                    mcu.log.info(f"waiting {env['gc-pressure-settling']}s for pressure to settle")
+                    mcu.log.debug(f"waiting {env['gc-pressure-settling']}s for pressure to settle")
                     for i in range(env['gc-pressure-settling']):
                         gc.parse_serial()
                         mcu.display_text(f"{i} pressure={gc.pressure}")
-                        mcu.log.info(f"{i} pressure={gc.pressure}")
+                        mcu.log.debug(f"{i} pressure={gc.pressure}")
                         time.sleep(1)
                     mcu.data[f'pr{pump_index}'] = gc.pressure
 
@@ -540,11 +540,11 @@ def main():
                 temp = tc.temperature
 
                 if temp <= (target_temp - hyst) and j.value == False:
-                    mcu.log.debug(f"Jacket{jacket_index+1} at {temp}C, target {target_temp}C, turning on jacket")
+                    mcu.log.info(f"Jacket{jacket_index+1} at {temp}C, target {target_temp}C, turning on jacket")
                     j.value = True
 
                 if temp >= (target_temp + hyst) and j.value == True:
-                    mcu.log.debug(f"Jacket{jacket_index+1} at {temp}C, target {target_temp}C, turning off jacket")
+                    mcu.log.info(f"Jacket{jacket_index+1} at {temp}C, target {target_temp}C, turning off jacket")
                     j.value = False
             except IndexError as e:
                 if len(tc_channels) < 6:

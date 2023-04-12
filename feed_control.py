@@ -11,7 +11,7 @@ import board
 # scheduling and event/error handling libs
 import adafruit_logging as logging
 
-__version__ = "3.4.0"
+__version__ = "3.4.1"
 __filename__ = "feed_control.py"
 __repo__ = "https://github.com/calcut/circuitpy-septic-tank"
 
