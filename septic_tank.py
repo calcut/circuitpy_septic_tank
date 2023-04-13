@@ -16,7 +16,7 @@ import digitalio
 import adafruit_logging as logging
 
 
-__version__ = "3.4.1"
+__version__ = "3.4.2"
 __repo__ = "https://github.com/calcut/circuitpy-septic_tank"
 __filename__ = "septic_tank.py"
 
@@ -542,10 +542,16 @@ def main():
                 if temp <= (target_temp - hyst) and j.value == False:
                     mcu.log.info(f"Jacket{jacket_index+1} at {temp}C, target {target_temp}C, turning on jacket")
                     j.value = True
+                    mcu.log.info(f"{jacket_relays[0].value=} {jacket_relays[1].value=} {jacket_relays[2].value=}")
+                    mcu.log.info(f"{tc_channels[0].temperature=} {tc_channels[1].temperature=} {tc_channels[2].temperature=}")
+                    mcu.log.info(f"{tc_channels[3].temperature=} {tc_channels[4].temperature=} {tc_channels[5].temperature=}")
 
                 if temp >= (target_temp + hyst) and j.value == True:
                     mcu.log.info(f"Jacket{jacket_index+1} at {temp}C, target {target_temp}C, turning off jacket")
                     j.value = False
+                    mcu.log.info(f"{jacket_relays[0].value=} {jacket_relays[1].value=} {jacket_relays[2].value=}")
+                    mcu.log.info(f"{tc_channels[0].temperature=} {tc_channels[1].temperature=} {tc_channels[2].temperature=}")
+                    mcu.log.info(f"{tc_channels[3].temperature=} {tc_channels[4].temperature=} {tc_channels[5].temperature=}")
             except IndexError as e:
                 if len(tc_channels) < 6:
                     mcu.log.info(f"Jacket control IndexError, expected 6 thermocouple channels, found {len(tc_channels)}")
