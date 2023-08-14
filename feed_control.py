@@ -4,6 +4,7 @@ from circuitpy_mcu.mcu import Mcu
 from circuitpy_mcu.notecard_manager import Notecard_manager
 
 from circuitpy_septic_tank.solenoid_valve import Valve
+import digitalio
 
 import time
 import board
@@ -24,6 +25,12 @@ LOGLEVEL = logging.DEBUG
 # LOGLEVEL = logging.INFO
 
 def main():
+
+    switch_manual_mode = digitalio.DigitalInOut(board.D13)
+    switch_manual_mode.switch_to_input(pull=digitalio.Pull.DOWN)
+
+    switch_open_valves = digitalio.DigitalInOut(board.MOSI)
+    switch_open_valves.switch_to_input(pull=digitalio.Pull.DOWN)
 
     closed_position_signals = [
         board.A0,
@@ -238,8 +245,16 @@ def main():
     timer_B = 0
     timer_C=-15*MINUTES
 
+    def manual_switches():
+        global valves
+
+        for v in valves:
+            v.manual = switch_manual_mode.value
+            v.manual_pos = switch_open_valves.value
+
     while True:
         mcu.service(serial_parser=usb_serial_parser)
+        manual_switches()
         for v in valves:
             v.update()
 
