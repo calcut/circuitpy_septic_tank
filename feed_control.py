@@ -243,14 +243,39 @@ def main():
     
     timer_A = 0
     timer_B = 0
+    timer_D = 0
     timer_C=-15*MINUTES
 
     def manual_switches():
         global valves
 
-        for v in valves:
-            v.manual = switch_manual_mode.value
-            v.manual_pos = switch_open_valves.value
+
+        if time.monotonic() - timer_D > 1:
+            timer_D = time.monotonic()
+
+            if switch_manual_mode.value == True:
+                if switch_open_valves.value == True:
+                    # mcu.log.info('Manual mode: Pulsing')
+                    for v in valves:
+                        v.manual = False
+                        v.pulses = 10
+                        v.pulsing = True
+                        v.pulse = 0
+
+                else:
+                    # mcu.log.info('Manual mode: Closed')
+                    for v in valves:
+                        v.manual = True
+                        v.manual_pos = False
+                        v.pulsing = False
+                        v.pulse = 0
+
+            else:
+                # mcu.log.info('Auto mode')
+                for v in valves:
+                    v.manual = False
+                    v.pulsing = False
+                    v.pulses = 0
 
     while True:
         mcu.service(serial_parser=usb_serial_parser)
