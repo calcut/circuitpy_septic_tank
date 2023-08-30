@@ -267,6 +267,7 @@ def main():
                 else:
                     # mcu.log.info('Manual mode: Closed')
                     for v in valves:
+                        v.timer_toggle = -1000
                         v.manual = True
                         v.manual_pos = False
                         v.pulsing = False
