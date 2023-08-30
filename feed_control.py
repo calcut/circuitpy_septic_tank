@@ -243,11 +243,13 @@ def main():
     
     timer_A = 0
     timer_B = 0
+    global timer_D
     timer_D = 0
     timer_C=-15*MINUTES
 
     def manual_switches():
         global valves
+        global timer_D
 
 
         if time.monotonic() - timer_D > 1:
@@ -295,7 +297,7 @@ def main():
 
         if time.monotonic() - timer_A > 1:
             timer_A = time.monotonic()
-            mcu.led.value = not mcu.led.value #heartbeat LED
+            # mcu.led.value = not mcu.led.value #heartbeat LED
             display()
 
         if time.monotonic() - timer_B > (5):
