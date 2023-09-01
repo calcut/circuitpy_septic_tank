@@ -247,15 +247,19 @@ def main():
     timer_D = 0
     timer_C=-15*MINUTES
 
+    global last_value_manual_mode_switch
+    last_value_manual_mode_switch = False
+
     def manual_switches():
         global valves
         global timer_D
-
+        global last_value_manual_mode_switch
 
         if time.monotonic() - timer_D > 1:
             timer_D = time.monotonic()
 
             if switch_manual_mode.value == True:
+                last_value_manual_mode_switch = True
                 if switch_open_valves.value == True:
                     # mcu.log.info('Manual mode: Pulsing')
                     for v in valves:
@@ -274,11 +278,16 @@ def main():
                         v.pulse = 0
 
             else:
-                # mcu.log.info('Auto mode')
-                for v in valves:
-                    v.manual = False
-                    v.pulsing = False
-                    v.pulses = 0
+                if last_value_manual_mode_switch == True:
+                    # only if a transition from manual to auto has occured
+                    # mcu.log.info('Auto mode')
+                    for v in valves:
+                        v.manual = False
+                        v.pulsing = False
+                        v.pulses = 0
+
+                last_value_manual_mode_switch = False
+
 
     while True:
         mcu.service(serial_parser=usb_serial_parser)
