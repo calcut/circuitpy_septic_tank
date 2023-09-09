@@ -63,6 +63,7 @@ def main():
         'utc-offset-hours'      : 1,
         'valve-open-duration'   : 10, #seconds open in a pulse
         'valve-close-duration'  : 120, #seconds closed in a pulse
+        'enable_manual_switch'  : False,
         'v01-mode'              : "auto", # or "manual"
         'v01-manual-pos'        : "closed", # or "open"
         'v02-mode'              : "auto", # or "manual"
@@ -255,38 +256,40 @@ def main():
         global timer_D
         global last_value_manual_mode_switch
 
-        if time.monotonic() - timer_D > 1:
-            timer_D = time.monotonic()
+        if env['enable_manual_switch'] == True:
 
-            if switch_manual_mode.value == True:
-                last_value_manual_mode_switch = True
-                if switch_open_valves.value == True:
-                    # mcu.log.info('Manual mode: Pulsing')
-                    for v in valves:
-                        v.manual = False
-                        v.pulses = 10
-                        v.pulsing = True
-                        v.pulse = 0
+            if time.monotonic() - timer_D > 1:
+                timer_D = time.monotonic()
+
+                if switch_manual_mode.value == True:
+                    last_value_manual_mode_switch = True
+                    if switch_open_valves.value == True:
+                        # mcu.log.info('Manual mode: Pulsing')
+                        for v in valves:
+                            v.manual = False
+                            v.pulses = 10
+                            v.pulsing = True
+                            v.pulse = 0
+
+                    else:
+                        # mcu.log.info('Manual mode: Closed')
+                        for v in valves:
+                            v.timer_toggle = -1000
+                            v.manual = True
+                            v.manual_pos = False
+                            v.pulsing = False
+                            v.pulse = 0
 
                 else:
-                    # mcu.log.info('Manual mode: Closed')
-                    for v in valves:
-                        v.timer_toggle = -1000
-                        v.manual = True
-                        v.manual_pos = False
-                        v.pulsing = False
-                        v.pulse = 0
+                    if last_value_manual_mode_switch == True:
+                        # only if a transition from manual to auto has occured
+                        # mcu.log.info('Auto mode')
+                        for v in valves:
+                            v.manual = False
+                            v.pulsing = False
+                            v.pulses = 0
 
-            else:
-                if last_value_manual_mode_switch == True:
-                    # only if a transition from manual to auto has occured
-                    # mcu.log.info('Auto mode')
-                    for v in valves:
-                        v.manual = False
-                        v.pulsing = False
-                        v.pulses = 0
-
-                last_value_manual_mode_switch = False
+                    last_value_manual_mode_switch = False
 
 
     while True:
