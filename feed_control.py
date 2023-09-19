@@ -262,6 +262,11 @@ def main():
                 timer_D = time.monotonic()
 
                 if switch_manual_mode.value == True:
+                    
+                    if last_value_manual_mode_switch == False:
+                        # only if a transition from auto to manual has occured
+                        mcu.log.warning('Switched to Manual mode')
+                    
                     last_value_manual_mode_switch = True
                     if switch_open_valves.value == True:
                         # mcu.log.info('Manual mode: Pulsing')
@@ -283,7 +288,7 @@ def main():
                 else:
                     if last_value_manual_mode_switch == True:
                         # only if a transition from manual to auto has occured
-                        # mcu.log.info('Auto mode')
+                        mcu.log.warning('Switched to Auto mode')
                         for v in valves:
                             v.manual = False
                             v.pulsing = False
@@ -304,7 +309,10 @@ def main():
 
             next_feed = time.localtime(time.time() + next_feed_countdown + env['utc-offset-hours']*60*60)
             mcu.log.info(f"alarm set for {next_feed.tm_hour:02d}:{next_feed.tm_min:02d}:00 localtime")
-            
+
+            if switch_manual_mode.value == True:
+                mcu.log.warning("Manual mode is enabled, scheduled auto feed will fail")
+
             for v in valves:
                 v.pulsing = True
 
