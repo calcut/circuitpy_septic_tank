@@ -46,6 +46,7 @@ def main():
         'pump2-speed'           : 0.6,
         'pump3-speed'           : 0.6,
         'pump4-speed'           : 0.6,
+        'pump5-speed'           : 0.6,
         'jacket-target-temps'   : [30, 30, 30],
         'jacket-hysteresis'     : 0.5,
         'jacket-control'        : True,
@@ -55,9 +56,9 @@ def main():
         'gc-sample-times'       : ["02:00", "06:00", "10:00", "14:00", "18:00", "22:00"],
         'utc-offset-hours'      : 1,
         'gc-pump-time'          : 240,# 4 minutes
-        'gc-pump-sequence'      : [1, 4, 2, 4, 3, 4],
+        'gc-pump-sequence'      : [1, 4, 2, 4, 3, 4, 5, 4],
         'gc-pressure-settling'  : 10,
-        'num-pumps'             : 4,
+        'num-pumps'             : 5,
         'ph-channels'           : 3,
         'dispay-page-time'      : 8, #seconds
         'ota'                   : __version__
@@ -219,8 +220,9 @@ def main():
             # Changing pwm freq from 1600Hz to <500Hz helps a lot with matching speeds. unsure exactly why. 
             valve_driver = MotorKit(i2c=mcu.i2c2, address=0x6E, pwm_frequency=400)
             pump_driver = MotorKit(i2c=mcu.i2c2, address=0x6F, pwm_frequency=400)
-            pumps = [pump_driver.motor1, pump_driver.motor2, pump_driver.motor3, pump_driver.motor4]
-            valves = [valve_driver.motor1, valve_driver.motor2, valve_driver.motor3, valve_driver.motor4]
+            extra_driver = MotorKit(i2c=mcu.i2c2, address=0x6C, pwm_frequency=400)
+            pumps = [pump_driver.motor1, pump_driver.motor2, pump_driver.motor3, pump_driver.motor4, extra_driver.motor1]
+            valves = [valve_driver.motor1, valve_driver.motor2, valve_driver.motor3, valve_driver.motor4, extra_driver.motor2]
 
             for p in pumps:
                 p.throttle = 0
