@@ -272,7 +272,6 @@ def main():
                         # mcu.log.info('Manual mode: Pulsing')
                         for v in valves:
                             v.manual = False
-                            v.pulses = 10
                             v.pulsing = True
                             v.pulse = 0
 
@@ -292,7 +291,7 @@ def main():
                         for v in valves:
                             v.manual = False
                             v.pulsing = False
-                            v.pulses = 0
+                            v.pulse = 0
 
                     last_value_manual_mode_switch = False
 
